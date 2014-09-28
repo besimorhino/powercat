@@ -45,11 +45,14 @@ function powercat
         Write-Verbose ("Listening on [0.0.0.0] (port " + $p + ")")
         $Socket = New-Object System.Net.Sockets.TcpListener $p
         $Socket.Start()
-        #$Client = $Socket.AcceptTcpClient()
         $AcceptHandle = $Socket.BeginAcceptTcpClient($null, $null)
         $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         while($True)
         {
+          if($Host.UI.RawUI.KeyAvailable)
+          {
+            Read-Host
+          }
           if($Stopwatch.Elapsed.TotalSeconds -gt $t)
           {
             Write-Output "Listener Timeout."
@@ -75,6 +78,10 @@ function powercat
         $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         while($True)
         {
+          if($Host.UI.RawUI.KeyAvailable)
+          {
+            Read-Host
+          }
           if($Stopwatch.Elapsed.TotalSeconds -gt $t)
           {
             Write-Output "Connection Timeout."
@@ -148,6 +155,10 @@ function powercat
         $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         while($True)
         {
+          if($Host.UI.RawUI.KeyAvailable)
+          {
+            Read-Host
+          }
           if($Stopwatch.Elapsed.TotalSeconds -gt $t)
           {
             Write-Output "Listener Timeout."
@@ -173,6 +184,10 @@ function powercat
         $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         while($True)
         {
+          if($Host.UI.RawUI.KeyAvailable)
+          {
+            Read-Host
+          }
           if($Stopwatch.Elapsed.TotalSeconds -gt $t)
           {
             Write-Output "Connection Timeout."
