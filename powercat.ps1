@@ -65,7 +65,7 @@ function powercat
     $Stopwatch.Stop()
     Write-Verbose ("Connection from [" + $Client.Client.RemoteEndPoint.Address.IPAddressToString + "] port " + $port + " [tcp] accepted (source port " + $Client.Client.RemoteEndPoint.Port + ")")
     $Stream = $Client.GetStream()
-    return $Stream
+    return @($Stream,$Socket)
   }
   
   function Connect
@@ -97,7 +97,7 @@ function powercat
     if($Socket -eq $null){return 2}
     Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeeded!")
     $Stream = $Socket.GetStream()
-    return $Stream
+    return @($Stream,$Socket)
   }
   
   if($e -eq "")
@@ -106,13 +106,15 @@ function powercat
     {
       if($l)
       {
-        $Stream = Listen $p $t
+        $ReturnValue = Listen $p $t
       }
       else
       {
-        $Stream = Connect $c $p $t
+        $ReturnValue = Connect $c $p $t
       }
 
+      $Stream = $ReturnValue[0]
+      $Socket = $ReturnValue[1]
       if($Stream -eq 1){return "Timeout."}
       if($Stream -eq 2){return "Connection Error."}
 
@@ -140,7 +142,7 @@ function powercat
     }
     finally
     {
-      $ErrorActionPreference= 'SilentlyContinue'
+      
       $Stream.Close()
       if($l){$Socket.Stop()}
       else{$Socket.Close()}
@@ -152,13 +154,15 @@ function powercat
     {
       if($l)
       {
-        $Stream = Listen $p $t
+        $ReturnValue = Listen $p $t
       }
       else
       {
-        $Stream = Connect $c $p $t
+        $ReturnValue = Connect $c $p $t
       }
 
+      $Stream = $ReturnValue[0]
+      $Socket = $ReturnValue[1]
       if($Stream -eq 1){return "Timeout."}
       if($Stream -eq 2){return "Connection Error."}
 
