@@ -42,23 +42,26 @@ function powercat
         
           `$StreamPipe = New-Object System.IO.Pipes.NamedPipeServerStream(`$StreamPipeName,[System.IO.Pipes.PipeDirection]::InOut,2,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::Asynchronous)
           `$StreamPipe.WaitForConnection()
-          `$DestinationBuffer = New-Object System.Byte[] 1
-          `$ReadOperation = `$StreamPipe.BeginRead(`$DestinationBuffer, 0, 1, `$null, `$null)
+          `$PipeDestinationBuffer = New-Object System.Byte[] 1
+          `$PipeReadOperation = `$StreamPipe.BeginRead(`$PipeDestinationBuffer, 0, 1, `$null, `$null)
           `$StreamDestinationBuffer = New-Object System.Byte[] 1
-          `$StreamReadOperation = `$Stream.ReadAsync(`$StreamDestinationBuffer, 0, 1)
+          `$StreamReadOperation = `$Stream.BeginRead(`$StreamDestinationBuffer, 0, 1, `$null, `$null)
           
           while(`$True)
           {
-            if(`$ReadOperation.IsCompleted)
+            if(`$PipeReadOperation.IsCompleted)
             {
-              `$Stream.Write(`$DestinationBuffer, 0, 1)
-              `$ReadOperation = `$StreamPipe.BeginRead(`$DestinationBuffer, 0, 1, `$null, `$null)
+              if(`$PipeReadOperation.Result -eq 0){exit}
+              `$Stream.Write(`$PipeDestinationBuffer[0], 0, 1)
+              `$PipeBytesRead = `$StreamPipe.EndRead(`$PipeReadOperation)
+              `$PipeReadOperation = `$StreamPipe.BeginRead(`$PipeDestinationBuffer, 0, 1, `$null, `$null)
             }
             if(`$StreamReadOperation.IsCompleted)
             {
               if(`$StreamReadOperation.Result -eq 0){exit}
-              Write-Host -n `$Encoding.GetString(`$StreamDestinationBuffer)
-              `$StreamReadOperation = `$Stream.ReadAsync(`$StreamDestinationBuffer, 0, 1)
+              Write-Host -n `$Encoding.GetString(`$StreamDestinationBuffer[0])
+              `$StreamBytesRead = `$Stream.EndRead(`$StreamReadOperation)
+              `$StreamReadOperation = `$Stream.BeginRead(`$StreamDestinationBuffer, 0, 1, `$null, `$null)
             }
           }
         }
@@ -153,19 +156,26 @@ function powercat
       $Process = [System.Diagnostics.Process]::Start($ProcessStartInfo)
       $Process.Start() | Out-Null
       
-      $ProcessDestinationBuffer = New-Object System.Char[] 1
-      $ProcessReadOperation = $Process.StandardOutput.ReadAsync($ProcessDestinationBuffer, 0, 1)
+      $ProcessDestinationBuffer = New-Object System.Byte[] 1
+      $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 1, $null, $null)
       $StreamDestinationBuffer = New-Object System.Byte[] 1
-      $StreamReadOperation = $Stream.ReadAsync($StreamDestinationBuffer, 0, 1)
+      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
       $ToStreamString = ""
-       while($True)
+      
+      while($True)
       {
+        if($Process.HasExited)
+        {
+          break
+        }
+
         if($ProcessReadOperation.IsCompleted)
         {
           try
           {
-            $Stream.Write($Encoding.GetBytes($ProcessDestinationBuffer), 0, 1)
-            $ProcessReadOperation = $Process.StandardOutput.ReadAsync($ProcessDestinationBuffer, 0, 1)
+            $Stream.Write($ProcessDestinationBuffer[0], 0, 1)
+            $ProcessBytesRead = $Process.StandardOutput.BaseStream.EndRead($ProcessReadOperation)
+            $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 1, $null, $null)
           }
           catch{}
         }
@@ -176,22 +186,28 @@ function powercat
           if($StreamDestinationBuffer -eq 10)
           {
             $Process.StandardInput.WriteLine($ToStreamString)
-            $StreamReadOperation = $Stream.ReadAsync($StreamDestinationBuffer, 0, 1)
+            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
             $ToStreamString = ""
           }
           else
           {
-            $ToStreamString += $Encoding.GetString($StreamDestinationBuffer)
-            $StreamReadOperation = $Stream.ReadAsync($StreamDestinationBuffer, 0, 1)
+            $ToStreamString += $Encoding.GetString([char]$StreamDestinationBuffer[0])
+            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
           }
         }
       }
     }
     finally
     {
-      $Process | Stop-Process
-      $Stream.Close()
-      $Socket.Stop()
+      try
+      {
+        $Process | Stop-Process
+        $Stream.Close()
+        $Socket.Stop()
+      }
+      catch{}
     }
   }
 }
