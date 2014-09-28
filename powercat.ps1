@@ -121,33 +121,20 @@ function powercat
 
       $StreamDestinationBuffer = New-Object System.Byte[] 1
       $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-      $ToStreamString = ""
     
       while($True)
       {
         if($Host.UI.RawUI.KeyAvailable)
         {
           $command = Read-Host
-          $Stream.Write($Encoding.GetBytes($command + "`r`n"),0,($command + "`r`n").Length)
+          $Stream.Write($Encoding.GetBytes($command + "`n"),0,($command + "`n").Length)
         }
         if($StreamReadOperation.IsCompleted)
         {
-          if($StreamDestinationBuffer[0] -eq 0){break}
-          if($StreamDestinationBuffer[0] -eq 10)
-          {
-            Write-Output $ToStreamString
-            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
-            if($StreamBytesRead -eq 0){break}
-            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-            $ToStreamString = ""
-          }
-          else
-          {
-            $ToStreamString += $Encoding.GetString([char]$StreamDestinationBuffer[0])
-            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
-            if($StreamBytesRead -eq 0){Write-Output $ToStreamString; break}
-            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-          }
+          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          if($StreamBytesRead -eq 0){break}
+          Write-Host -n $Encoding.GetString($StreamDestinationBuffer)
+          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
         }
       }
     }
