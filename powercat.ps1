@@ -11,8 +11,6 @@
     GAPING_SECURITY_HOLE :)
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
-  .PARAMETER o
-    Use Write-Output in stead of Write-Host. (For redirection down the pipe)
 #>
 function powercat
 {
@@ -21,8 +19,7 @@ function powercat
     [Parameter(Mandatory=$True,Position=-1)][string]$p="",
     [switch]$l=$False,
     [string]$e="",
-    $t=60,
-    [switch]$o=$False
+    $t=60
   )
   
   if($l)
@@ -121,12 +118,6 @@ function powercat
       if($Stream -eq 1){return "Timeout."}
       if($Stream -eq 2){return "Connection Error."}
 
-      $WriteOutputCommand = "Write-Host -n '"
-      if($o)
-      {
-        $WriteOutputCommand = "Write-Output '"
-      }
-      
       $Buffer = New-Object System.Byte[] 1
       $Encoding = New-Object System.Text.AsciiEncoding
 
@@ -144,7 +135,7 @@ function powercat
         {
           $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
           if($StreamBytesRead -eq 0){break}
-          IEX ($WriteOutputCommand + $Encoding.GetString($StreamDestinationBuffer) + "'")
+          Write-Host -n $Encoding.GetString($StreamDestinationBuffer)
           $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
         }
       }
