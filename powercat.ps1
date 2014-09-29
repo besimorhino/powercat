@@ -11,6 +11,8 @@
     GAPING_SECURITY_HOLE :)
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
+  .PARAMETER o
+    Use Write-Output in stead of Write-Host. (For redirection down the pipe)
 #>
 function powercat
 {
