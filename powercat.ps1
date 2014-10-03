@@ -185,6 +185,7 @@ function powercat
     }
     finally
     {
+      $ErrorActionPreference= 'SilentlyContinue'
       $Stream.Close()
       if($l){$Socket.Stop()}
       else{$Socket.Close()}
@@ -236,7 +237,7 @@ function powercat
     }
     finally
     {
-      
+      $ErrorActionPreference= 'SilentlyContinue'
       $Stream.Close()
       if($l){$Socket.Stop()}
       else{$Socket.Close()}
