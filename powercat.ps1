@@ -9,6 +9,8 @@
     The port to listen on, or the port to connect to.
   .PARAMETER e
     GAPING_SECURITY_HOLE :)
+  .PARAMETER r
+    Relay. Formats: "-r 10.1.1.1:443", "-r 443"
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
 #>
@@ -19,6 +21,7 @@ function powercat
     [Parameter(Mandatory=$True,Position=-1)][string]$p="",
     [switch]$l=$False,
     [string]$e="",
+    [string]$r="",
     $t=60
   )
   
@@ -100,7 +103,96 @@ function powercat
     return @($Stream,$Socket,($Socket.ReceiveBufferSize))
   }
   
-  if($e -eq "")
+  if($r -ne "")
+  {
+    try
+    {
+      if($r.Contains(":"))
+      {
+        $RelayTarget=$r.split(":")[0]
+        $RelayPort=$r.split(":")[1]
+        $RelayType = "Client"
+      }
+      else
+      {
+        $RelayPort=$r
+        $RelayType = "Listener"
+      }
+    }
+    catch
+    {
+      return "Bad -r option. Formats: -r 10.1.1.1:443 , -r 443"
+    }
+    
+    try
+    {
+      # Stream1
+      if($l)
+      {
+        $ReturnValue = Listen $p $t
+      }
+      else
+      {
+        $ReturnValue = Connect $c $p $t
+      }
+      
+      $Stream = $ReturnValue[0]
+      $Socket = $ReturnValue[1]
+      $BufferSize = $ReturnValue[2]
+      if($Stream -eq 1){return "Timeout."}
+      if($Stream -eq 2){return "Connection Error."}
+      
+      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
+      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+      
+      # RelayStream
+      if($RelayType -eq "Listener")
+      {
+        $ReturnValue = Listen $RelayPort $t
+      }
+      else
+      {
+        $ReturnValue = Connect $RelayTarget $RelayPort $t
+      }
+      
+      $RelayStream = $ReturnValue[0]
+      $RelaySocket = $ReturnValue[1]
+      $RelayBufferSize = $ReturnValue[2]
+      if($RelayStream -eq 1){return "Timeout."}
+      if($RelayStream -eq 2){return "Connection Error."}
+      
+      $RelayStreamDestinationBuffer = New-Object System.Byte[] $RelayBufferSize
+      $RelayStreamReadOperation = $RelayStream.BeginRead($RelayStreamDestinationBuffer, 0, $RelayBufferSize, $null, $null)
+      
+      while($True)
+      {
+        if($StreamReadOperation.IsCompleted)
+        {
+          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          if($StreamBytesRead -eq 0){break}
+          $RelayStream.Write(($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]), 0, $StreamBytesRead)
+          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+        }
+        if($RelayStreamReadOperation.IsCompleted)
+        {
+          $RelayStreamBytesRead = $RelayStream.EndRead($RelayStreamReadOperation)
+          if($RelayStreamBytesRead -eq 0){break}
+          $Stream.Write(($RelayStreamDestinationBuffer[0..([int]$RelayStreamBytesRead-1)]), 0, $RelayStreamBytesRead)
+          $RelayStreamReadOperation = $RelayStream.BeginRead($RelayStreamDestinationBuffer, 0, $RelayBufferSize, $null, $null)
+        }
+      }
+    }
+    finally
+    {
+      $Stream.Close()
+      if($l){$Socket.Stop()}
+      else{$Socket.Close()}
+      $RelayStream.Close()
+      if($RelayType -eq "Listener"){$RelaySocket.Stop()}
+      else{$RelaySocket.Close()}
+    }
+  }
+  elseif($e -eq "")
   {
     try
     {
