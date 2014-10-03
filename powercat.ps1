@@ -22,6 +22,7 @@ function powercat
     [switch]$l=$False,
     [string]$e="",
     [string]$r="",
+    [Parameter(ValueFromPipeline=$True)][string]$i="",
     $t=60
   )
   
@@ -214,7 +215,9 @@ function powercat
       $Encoding = New-Object System.Text.AsciiEncoding
       $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
       $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-    
+
+      if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
+
       while($True)
       {
         if($Host.UI.RawUI.KeyAvailable)
@@ -272,6 +275,8 @@ function powercat
       $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
       $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
       $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+      
+      if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
       
       while($True)
       {
