@@ -65,7 +65,7 @@ function powercat
     $Stopwatch.Stop()
     Write-Verbose ("Connection from [" + $Client.Client.RemoteEndPoint.Address.IPAddressToString + "] port " + $port + " [tcp] accepted (source port " + $Client.Client.RemoteEndPoint.Port + ")")
     $Stream = $Client.GetStream()
-    return @($Stream,$Socket)
+    return @($Stream,$Socket,($Client.ReceiveBufferSize))
   }
   
   function Connect
@@ -97,7 +97,7 @@ function powercat
     if($Socket -eq $null){return 2}
     Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeeded!")
     $Stream = $Socket.GetStream()
-    return @($Stream,$Socket)
+    return @($Stream,$Socket,($Socket.ReceiveBufferSize))
   }
   
   if($e -eq "")
@@ -115,14 +115,13 @@ function powercat
 
       $Stream = $ReturnValue[0]
       $Socket = $ReturnValue[1]
+      $BufferSize = $ReturnValue[2]
       if($Stream -eq 1){return "Timeout."}
       if($Stream -eq 2){return "Connection Error."}
 
-      $Buffer = New-Object System.Byte[] 1
       $Encoding = New-Object System.Text.AsciiEncoding
-
-      $StreamDestinationBuffer = New-Object System.Byte[] 1
-      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
+      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
+      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
     
       while($True)
       {
@@ -135,8 +134,8 @@ function powercat
         {
           $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
           if($StreamBytesRead -eq 0){break}
-          Write-Host -n $Encoding.GetString($StreamDestinationBuffer)
-          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
+          Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])
+          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
         }
       }
     }
@@ -163,11 +162,9 @@ function powercat
 
       $Stream = $ReturnValue[0]
       $Socket = $ReturnValue[1]
+      $BufferSize = $ReturnValue[2]
       if($Stream -eq 1){return "Timeout."}
       if($Stream -eq 2){return "Connection Error."}
-
-      $Buffer = New-Object System.Byte[] 1
-      $Encoding = New-Object System.Text.AsciiEncoding
 
       $ProcessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
       $ProcessStartInfo.FileName = $e
@@ -177,48 +174,28 @@ function powercat
       $ProcessStartInfo.RedirectStandardError = $True
       $Process = [System.Diagnostics.Process]::Start($ProcessStartInfo)
       $Process.Start() | Out-Null
-      
-      $ProcessDestinationBuffer = New-Object System.Byte[] 1
-      $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 1, $null, $null)
-      $StreamDestinationBuffer = New-Object System.Byte[] 1
-      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-      $ToStreamString = ""
+
+      $Encoding = New-Object System.Text.AsciiEncoding
+      $ProcessDestinationBuffer = New-Object System.Byte[] 65536
+      $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
+      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
+      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
       
       while($True)
       {
-        if($Process.HasExited)
-        {
-          break
-        }
-
         if($ProcessReadOperation.IsCompleted)
         {
-          try
-          {
-            $Stream.Write($ProcessDestinationBuffer[0], 0, 1)
-            $ProcessBytesRead = $Process.StandardOutput.BaseStream.EndRead($ProcessReadOperation)
-            $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 1, $null, $null)
-          }
-          catch{}
+          $ProcessBytesRead = $Process.StandardOutput.BaseStream.EndRead($ProcessReadOperation)
+          if($ProcessBytesRead -eq 0){break}
+          $Stream.Write(($ProcessDestinationBuffer[0..([int]$ProcessBytesRead-1)]), 0, $ProcessBytesRead)
+          $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
         }
-
         if($StreamReadOperation.IsCompleted)
         {
-          if($StreamDestinationBuffer[0] -eq 10)
-          {
-            $Process.StandardInput.WriteLine($ToStreamString)
-            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
-            if($StreamBytesRead -eq 0){break}
-            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-            $ToStreamString = ""
-          }
-          else
-          {
-            $ToStreamString += $Encoding.GetString([char]$StreamDestinationBuffer[0])
-            $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
-            if($StreamBytesRead -eq 0){$Process.StandardInput.WriteLine($ToStreamString);break}
-            $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, 1, $null, $null)
-          }
+          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          if($StreamBytesRead -eq 0){break}
+          $Process.StandardInput.WriteLine($Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]).TrimEnd("`r").TrimEnd("`n"))
+          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
         }
       }
     }
