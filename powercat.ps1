@@ -25,24 +25,15 @@ function powercat
     [Parameter(ValueFromPipeline=$True)][string]$i="",
     $t=60
   )
-  
-  if($l)
-  {
-    $Failure = $False
-    netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
-    if($Failure){break}
-  }
+
   if(($c -eq "") -and (!$l))
   {
     return "You must select either client mode (-c) or listen mode (-l)."
   }
 
-  [console]::TreatControlCAsInput=$True
-
   function Listen
   {
     param($p,$t)
-  
     Write-Verbose ("Listening on [0.0.0.0] (port " + $p + ")")
     $Socket = New-Object System.Net.Sockets.TcpListener $p
     $Socket.Start()
@@ -52,7 +43,7 @@ function powercat
     {
       if($Host.UI.RawUI.KeyAvailable)
       {
-        Read-Host
+        $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
       }
       if($Stopwatch.Elapsed.TotalSeconds -gt $t)
       {
@@ -83,7 +74,7 @@ function powercat
     {
       if($Host.UI.RawUI.KeyAvailable)
       {
-        Read-Host
+        $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
       }
       if($Stopwatch.Elapsed.TotalSeconds -gt $t)
       {
@@ -103,57 +94,42 @@ function powercat
     $Stream = $Socket.GetStream()
     return @($Stream,$Socket,($Socket.ReceiveBufferSize))
   }
-  
-  if($r -ne "")
+
+  try
   {
-    try
+    [console]::TreatControlCAsInput=$True
+  
+    if($l)
+    {
+      $Failure = $False
+      netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
+      if($Failure){break}
+      $ReturnValue = Listen $p $t
+    }
+    else
+    {
+      $ReturnValue = Connect $c $p $t
+    }
+  
+    $Stream = $ReturnValue[0]
+    $Socket = $ReturnValue[1]
+    $BufferSize = $ReturnValue[2]
+    if($Stream -eq 1){return "Timeout."}
+    if($Stream -eq 2){return "Connection Error."}
+    $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
+    $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+    $Encoding = New-Object System.Text.AsciiEncoding
+    if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
+  
+    if($r -ne "")
     {
       if($r.Contains(":"))
       {
-        $RelayTarget=$r.split(":")[0]
-        $RelayPort=$r.split(":")[1]
-        $RelayType = "Client"
+        $ReturnValue = Connect $r.split(":")[0] $r.split(":")[1] $t
       }
       else
       {
-        $RelayPort=$r
-        $RelayType = "Listener"
-      }
-    }
-    catch
-    {
-      return "Bad -r option. Formats: -r 10.1.1.1:443 , -r 443"
-    }
-    
-    try
-    {
-      # Stream1
-      if($l)
-      {
-        $ReturnValue = Listen $p $t
-      }
-      else
-      {
-        $ReturnValue = Connect $c $p $t
-      }
-      
-      $Stream = $ReturnValue[0]
-      $Socket = $ReturnValue[1]
-      $BufferSize = $ReturnValue[2]
-      if($Stream -eq 1){return "Timeout."}
-      if($Stream -eq 2){return "Connection Error."}
-      
-      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
-      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-      
-      # RelayStream
-      if($RelayType -eq "Listener")
-      {
-        $ReturnValue = Listen $RelayPort $t
-      }
-      else
-      {
-        $ReturnValue = Connect $RelayTarget $RelayPort $t
+        $ReturnValue = Listen $r $t
       }
       
       $RelayStream = $ReturnValue[0]
@@ -161,12 +137,15 @@ function powercat
       $RelayBufferSize = $ReturnValue[2]
       if($RelayStream -eq 1){return "Timeout."}
       if($RelayStream -eq 2){return "Connection Error."}
-      
       $RelayStreamDestinationBuffer = New-Object System.Byte[] $RelayBufferSize
       $RelayStreamReadOperation = $RelayStream.BeginRead($RelayStreamDestinationBuffer, 0, $RelayBufferSize, $null, $null)
-      
+
       while($True)
       {
+        if($Host.UI.RawUI.KeyAvailable)
+        {
+          $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
+        }
         if($StreamReadOperation.IsCompleted)
         {
           $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
@@ -183,42 +162,8 @@ function powercat
         }
       }
     }
-    finally
+    elseif($e -eq "")
     {
-      $ErrorActionPreference= 'SilentlyContinue'
-      $Stream.Close()
-      if($l){$Socket.Stop()}
-      else{$Socket.Close()}
-      $RelayStream.Close()
-      if($RelayType -eq "Listener"){$RelaySocket.Stop()}
-      else{$RelaySocket.Close()}
-    }
-  }
-  elseif($e -eq "")
-  {
-    try
-    {
-      if($l)
-      {
-        $ReturnValue = Listen $p $t
-      }
-      else
-      {
-        $ReturnValue = Connect $c $p $t
-      }
-
-      $Stream = $ReturnValue[0]
-      $Socket = $ReturnValue[1]
-      $BufferSize = $ReturnValue[2]
-      if($Stream -eq 1){return "Timeout."}
-      if($Stream -eq 2){return "Connection Error."}
-
-      $Encoding = New-Object System.Text.AsciiEncoding
-      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
-      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-
-      if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
-
       while($True)
       {
         if($Host.UI.RawUI.KeyAvailable)
@@ -235,33 +180,8 @@ function powercat
         }
       }
     }
-    finally
+    else
     {
-      $ErrorActionPreference= 'SilentlyContinue'
-      $Stream.Close()
-      if($l){$Socket.Stop()}
-      else{$Socket.Close()}
-    }
-  }
-  else
-  {
-    try
-    {
-      if($l)
-      {
-        $ReturnValue = Listen $p $t
-      }
-      else
-      {
-        $ReturnValue = Connect $c $p $t
-      }
-
-      $Stream = $ReturnValue[0]
-      $Socket = $ReturnValue[1]
-      $BufferSize = $ReturnValue[2]
-      if($Stream -eq 1){return "Timeout."}
-      if($Stream -eq 2){return "Connection Error."}
-
       $ProcessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
       $ProcessStartInfo.FileName = $e
       $ProcessStartInfo.UseShellExecute = $False
@@ -270,17 +190,15 @@ function powercat
       $ProcessStartInfo.RedirectStandardError = $True
       $Process = [System.Diagnostics.Process]::Start($ProcessStartInfo)
       $Process.Start() | Out-Null
-
-      $Encoding = New-Object System.Text.AsciiEncoding
       $ProcessDestinationBuffer = New-Object System.Byte[] 65536
       $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
-      $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
-      $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-      
-      if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
-      
+    
       while($True)
       {
+        if($Host.UI.RawUI.KeyAvailable)
+        {
+          $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
+        }
         if($ProcessReadOperation.IsCompleted)
         {
           $ProcessBytesRead = $Process.StandardOutput.BaseStream.EndRead($ProcessReadOperation)
@@ -297,13 +215,27 @@ function powercat
         }
       }
     }
-    finally
+  }
+  finally
+  {
+    $ErrorActionPreference= 'SilentlyContinue'
+    try{$Process | Stop-Process}
+    catch{}
+    try{$Stream.Close()}
+    catch{}
+    try
     {
-      $ErrorActionPreference= 'SilentlyContinue'
-      $Process | Stop-Process
-      $Stream.Close()
       if($l){$Socket.Stop()}
       else{$Socket.Close()}
     }
+    catch{}
+    try{$RelayStream.Close()}
+    catch{}
+    try
+    {
+      if($r.Contains(":")){$RelaySocket.Close()}
+      else{$RelaySocket.Stop()}
+    }
+    catch{}
   }
 }
