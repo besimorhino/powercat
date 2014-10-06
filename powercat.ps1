@@ -97,8 +97,6 @@ function powercat
 
   try
   {
-    [console]::TreatControlCAsInput=$True
-  
     if($l)
     {
       $Failure = $False
