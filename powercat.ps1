@@ -188,21 +188,30 @@ function powercat
       $ProcessStartInfo.RedirectStandardError = $True
       $Process = [System.Diagnostics.Process]::Start($ProcessStartInfo)
       $Process.Start() | Out-Null
-      $ProcessDestinationBuffer = New-Object System.Byte[] 65536
-      $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
-    
+      $StdOutDestinationBuffer = New-Object System.Byte[] 65536
+      $StdOutReadOperation = $Process.StandardOutput.BaseStream.BeginRead($StdOutDestinationBuffer, 0, 65536, $null, $null)
+      $StdErrDestinationBuffer = New-Object System.Byte[] 65536
+      $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
+      
       while($True)
       {
         if($Host.UI.RawUI.KeyAvailable)
         {
           $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
         }
-        if($ProcessReadOperation.IsCompleted)
+        if($StdOutReadOperation.IsCompleted)
         {
-          $ProcessBytesRead = $Process.StandardOutput.BaseStream.EndRead($ProcessReadOperation)
-          if($ProcessBytesRead -eq 0){break}
-          $Stream.Write(($ProcessDestinationBuffer[0..([int]$ProcessBytesRead-1)]), 0, $ProcessBytesRead)
-          $ProcessReadOperation = $Process.StandardOutput.BaseStream.BeginRead($ProcessDestinationBuffer, 0, 65536, $null, $null)
+          $StdOutBytesRead = $Process.StandardOutput.BaseStream.EndRead($StdOutReadOperation)
+          if($StdOutBytesRead -eq 0){break}
+          $Stream.Write(($StdOutDestinationBuffer[0..([int]$StdOutBytesRead-1)]), 0, $StdOutBytesRead)
+          $StdOutReadOperation = $Process.StandardOutput.BaseStream.BeginRead($StdOutDestinationBuffer, 0, 65536, $null, $null)
+        }
+        if($StdErrReadOperation.IsCompleted)
+        {
+          $StdErrBytesRead = $Process.StandardError.BaseStream.EndRead($StdErrReadOperation)
+          if($StdErrBytesRead -eq 0){break}
+          $Stream.Write(($StdErrDestinationBuffer[0..([int]$StdErrBytesRead-1)]), 0, $StdErrBytesRead)
+          $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
         }
         if($StreamReadOperation.IsCompleted)
         {
