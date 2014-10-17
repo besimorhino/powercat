@@ -10,7 +10,9 @@
   .PARAMETER e
     GAPING_SECURITY_HOLE :)
   .PARAMETER r
-    Relay. Formats: "-r 10.1.1.1:443", "-r 443"
+    Relay. Examples: "-r tcp:10.1.1.1:443", "-r tcp:443", "-r udp:10.1.1.1:53"
+  .PARAMETER u
+    Transfer data over UDP.
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
 #>
@@ -23,13 +25,12 @@ function powercat
     [string]$e="",
     [string]$r="",
     [Parameter(ValueFromPipeline=$True)][string]$i="",
+    [switch]$u=$False,
     $t=60
   )
 
-  if(($c -eq "") -and (!$l))
-  {
-    return "You must select either client mode (-c) or listen mode (-l)."
-  }
+  if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
+  if(($r -ne "") -and ($e -ne "")){return "-r and -e cannot be used at the same time."}
 
   function Listen
   {
@@ -43,7 +44,12 @@ function powercat
     {
       if($Host.UI.RawUI.KeyAvailable)
       {
-        $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
+        if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
+        {
+          $Socket.Stop()
+          $Stopwatch.Stop()
+          return 3
+        }
       }
       if($Stopwatch.Elapsed.TotalSeconds -gt $t)
       {
@@ -60,7 +66,7 @@ function powercat
     $Stopwatch.Stop()
     Write-Verbose ("Connection from [" + $Client.Client.RemoteEndPoint.Address.IPAddressToString + "] port " + $port + " [tcp] accepted (source port " + $Client.Client.RemoteEndPoint.Port + ")")
     $Stream = $Client.GetStream()
-    return @($Stream,$Socket,($Client.ReceiveBufferSize))
+    return @($Stream,$Socket,$Client.ReceiveBufferSize,$null)
   }
   
   function Connect
@@ -74,7 +80,12 @@ function powercat
     {
       if($Host.UI.RawUI.KeyAvailable)
       {
-        $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
+        if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
+        {
+          $Socket.Close()
+          $Stopwatch.Stop()
+          return 3
+        }
       }
       if($Stopwatch.Elapsed.TotalSeconds -gt $t)
       {
@@ -84,7 +95,8 @@ function powercat
       }
       if($ConnectHandle.IsCompleted)
       {
-        $Socket.EndConnect($ConnectHandle)
+        try{$Socket.EndConnect($ConnectHandle)}
+        catch{$Socket.Close(); $Stopwatch.Stop(); return 2}
         break
       }
     }
@@ -92,51 +104,201 @@ function powercat
     if($Socket -eq $null){return 2}
     Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeeded!")
     $Stream = $Socket.GetStream()
-    return @($Stream,$Socket,($Socket.ReceiveBufferSize))
+    return @($Stream,$Socket,$Socket.ReceiveBufferSize,$null)
   }
-
-  try
+  
+  function SetupUDP
   {
+    param($c,$p,$l)
     if($l)
     {
-      $Failure = $False
-      netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
-      if($Failure){break}
-      $ReturnValue = Listen $p $t
+      $SocketDestinationBuffer = New-Object System.Byte[] 65536
+      $EndPoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Any), $p
+      $Socket = New-Object System.Net.Sockets.UDPClient $p
+      $PacketInfo = New-Object System.Net.Sockets.IPPacketInformation
+      $ConnectHandle = $Socket.Client.BeginReceiveMessageFrom($SocketDestinationBuffer,0,65536,[System.Net.Sockets.SocketFlags]::None,[ref]$EndPoint,$null,$null)
+      Write-Verbose ("Listening on [0.0.0.0] port " + $p + " [udp]")
+      $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+      while($True)
+      {
+        if($Host.UI.RawUI.KeyAvailable)
+        {
+          if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
+          {
+            $Socket.Close()
+            $Stopwatch.Stop()
+            return 3
+          }
+        }
+        if($Stopwatch.Elapsed.TotalSeconds -gt $t)
+        {
+          $Socket.Close()
+          $Stopwatch.Stop()
+          return 1
+        }
+        if($ConnectHandle.IsCompleted)
+        {
+          $SocketBytesRead = $Socket.Client.EndReceiveMessageFrom($ConnectHandle,[ref]([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,[ref]$PacketInfo)
+          if($SocketBytesRead -gt 0){break}
+          else{return 2}
+        }
+      }
+      $Stopwatch.Stop()
+      $Encoding = New-Object System.Text.AsciiEncoding
+      Write-Verbose ("Connection from [" + $EndPoint.Address.IPAddressToString + "] port " + $p + " [udp] accepted (source port " + $EndPoint.Port + ")")
+      Write-Host -n $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])
     }
     else
     {
-      $ReturnValue = Connect $c $p $t
+      if(!$c.Contains("."))
+      {
+        $IPList = @()
+        [System.Net.Dns]::GetHostAddresses($c) | Where-Object {$_.AddressFamily -eq "InterNetwork"} | %{$IPList += $_.IPAddressToString}
+        Write-Verbose ("Name " + $c + " resolved to address " + $IPList[0])
+        $EndPoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($IPList[0])), $p
+      }
+      else
+      {
+        $EndPoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($c)), $p
+      }
+      $Socket = New-Object System.Net.Sockets.UDPClient
+      $Socket.Connect($c,$p)
+      Write-Verbose ("Sending UDP traffic to " + $c + " port " + $p)
     }
+    return @($Socket,$Socket,65536,$EndPoint)
+  }
+
+  if($l)
+  {
+    $Failure = $False
+    netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
+    if($Failure){break}
+  }
   
+  if($u)
+  {
+    function WriteToStream
+    {
+      param($Stream,$Bytes,$EndPoint)
+      $Stream.Client.SendTo($Bytes, $EndPoint) | Out-Null
+    }
+    function ReadFromStream
+    {
+      param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
+      return $Stream.Client.BeginReceiveFrom($StreamDestinationBuffer,0,$BufferSize,([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,$null,$null)
+    }
+    function EndReadFromStream
+    {
+      param($Stream,$StreamReadOperation,$EndPoint)
+      return $Stream.Client.EndReceiveFrom($StreamReadOperation,[ref]$EndPoint)
+    }
+    $ReturnValue = SetupUDP $c $p $l
+  }
+  else
+  {
+    function WriteToStream
+    {
+      param($Stream,$Bytes,$EndPoint)
+      $Stream.Write($Bytes, 0, $Bytes.Length)
+    }
+    function ReadFromStream
+    {
+      param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
+      return $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+    }
+    function EndReadFromStream
+    {
+      param($Stream,$StreamReadOperation,$EndPoint)
+      return $Stream.EndRead($StreamReadOperation)
+    }
+    if($l){$ReturnValue = Listen $p $t}
+    else{$ReturnValue = Connect $c $p $t}
+  }
+  
+  try
+  {
     $Stream = $ReturnValue[0]
     $Socket = $ReturnValue[1]
     $BufferSize = $ReturnValue[2]
+    $EndPoint = $ReturnValue[3]
     if($Stream -eq 1){return "Timeout."}
     if($Stream -eq 2){return "Connection Error."}
+    if($Stream -eq 3){return "Quitting..."}
     $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
-    $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+    $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
     $Encoding = New-Object System.Text.AsciiEncoding
-    if($i -ne ""){$Stream.Write($Encoding.GetBytes($i),0,$i.Length)}
+    if($i -ne ""){WriteToStream $Stream $i $EndPoint}
   
     if($r -ne "")
     {
       if($r.Contains(":"))
       {
-        $ReturnValue = Connect $r.split(":")[0] $r.split(":")[1] $t
+        if($r.split(":")[0].ToLower() -eq "tcp")
+        {
+          function WriteToRelayStream
+          {
+            param($Stream,$Bytes,$EndPoint)
+            $Stream.Write($Bytes, 0, $Bytes.Length)
+          }
+          function ReadFromRelayStream
+          {
+            param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
+            return $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+          }
+          function EndReadFromRelayStream
+          {
+            param($Stream,$StreamReadOperation,$EndPoint)
+            return $Stream.EndRead($StreamReadOperation)
+          }
+          if($r.split(":").Count -eq 2)
+          {
+            $ReturnValue = Listen $r.split(":")[1] $t
+          }
+          elseif($r.split(":").Count -eq 3)
+          {
+            $ReturnValue = Connect $r.split(":")[1] $r.split(":")[2] $t
+          }
+        }
+        elseif($r.split(":")[0].ToLower() -eq "udp")
+        {
+          function WriteToRelayStream
+          {
+            param($Stream,$Bytes,$EndPoint)
+            $Stream.Client.SendTo($Bytes, $EndPoint) | Out-Null
+          }
+          function ReadFromRelayStream
+          {
+            param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
+            return $Stream.Client.BeginReceiveFrom($StreamDestinationBuffer,0,$BufferSize,([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,$null,$null)
+          }
+          function EndReadFromRelayStream
+          {
+            param($Stream,$StreamReadOperation,$EndPoint)
+            return $Stream.Client.EndReceiveFrom($StreamReadOperation,[ref]$EndPoint)
+          }
+          if($r.split(":").Count -eq 2)
+          {
+            $ReturnValue = SetupUDP $null $r.split(":")[1] $True
+          }
+          elseif($r.split(":").Count -eq 3)
+          {
+            $ReturnValue = SetupUDP $r.split(":")[1] $r.split(":")[2] $False
+          }
+          else{Write-Output "Bad relay formatting"; break}
+        }
+        else{Write-Output "Bad relay formatting"; break}
       }
-      else
-      {
-        $ReturnValue = Listen $r $t
-      }
+      else{Write-Output "Bad relay formatting"; break}
       
       $RelayStream = $ReturnValue[0]
       $RelaySocket = $ReturnValue[1]
       $RelayBufferSize = $ReturnValue[2]
+      $RelayEndPoint = $ReturnValue[3]
       if($RelayStream -eq 1){return "Timeout."}
       if($RelayStream -eq 2){return "Connection Error."}
+      if($RelayStream -eq 3){return "Quitting..."}
       $RelayStreamDestinationBuffer = New-Object System.Byte[] $RelayBufferSize
-      $RelayStreamReadOperation = $RelayStream.BeginRead($RelayStreamDestinationBuffer, 0, $RelayBufferSize, $null, $null)
+      $RelayStreamReadOperation = ReadFromRelayStream $RelayStream $RelayStreamDestinationBuffer $RelayBufferSize $RelayEndPoint
 
       while($True)
       {
@@ -146,17 +308,17 @@ function powercat
         }
         if($StreamReadOperation.IsCompleted)
         {
-          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
           if($StreamBytesRead -eq 0){break}
-          $RelayStream.Write(($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]), 0, $StreamBytesRead)
-          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+          WriteToRelayStream $RelayStream $StreamDestinationBuffer[0..([int]$StreamBytesRead-1)] $RelayEndPoint
+          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
         }
         if($RelayStreamReadOperation.IsCompleted)
         {
-          $RelayStreamBytesRead = $RelayStream.EndRead($RelayStreamReadOperation)
+          $RelayStreamBytesRead = EndReadFromRelayStream $RelayStream $RelayStreamReadOperation $RelayEndPoint
           if($RelayStreamBytesRead -eq 0){break}
-          $Stream.Write(($RelayStreamDestinationBuffer[0..([int]$RelayStreamBytesRead-1)]), 0, $RelayStreamBytesRead)
-          $RelayStreamReadOperation = $RelayStream.BeginRead($RelayStreamDestinationBuffer, 0, $RelayBufferSize, $null, $null)
+          WriteToStream $Stream $RelayStreamDestinationBuffer[0..([int]$RelayStreamBytesRead-1)] $EndPoint
+          $RelayStreamReadOperation = ReadFromRelayStream $RelayStream $RelayStreamDestinationBuffer $RelayBufferSize $RelayEndPoint
         }
       }
     }
@@ -166,15 +328,14 @@ function powercat
       {
         if($Host.UI.RawUI.KeyAvailable)
         {
-          $command = Read-Host
-          $Stream.Write($Encoding.GetBytes($command + "`n"),0,($command + "`n").Length)
+          WriteToStream $Stream $Encoding.GetBytes((Read-Host) + "`n") $EndPoint
         }
         if($StreamReadOperation.IsCompleted)
         {
-          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
           if($StreamBytesRead -eq 0){break}
           Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])
-          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
         }
       }
     }
@@ -203,22 +364,22 @@ function powercat
         {
           $StdOutBytesRead = $Process.StandardOutput.BaseStream.EndRead($StdOutReadOperation)
           if($StdOutBytesRead -eq 0){break}
-          $Stream.Write(($StdOutDestinationBuffer[0..([int]$StdOutBytesRead-1)]), 0, $StdOutBytesRead)
+          WriteToStream $Stream $StdOutDestinationBuffer[0..([int]$StdOutBytesRead-1)] $EndPoint
           $StdOutReadOperation = $Process.StandardOutput.BaseStream.BeginRead($StdOutDestinationBuffer, 0, 65536, $null, $null)
         }
         if($StdErrReadOperation.IsCompleted)
         {
           $StdErrBytesRead = $Process.StandardError.BaseStream.EndRead($StdErrReadOperation)
           if($StdErrBytesRead -eq 0){break}
-          $Stream.Write(($StdErrDestinationBuffer[0..([int]$StdErrBytesRead-1)]), 0, $StdErrBytesRead)
+          WriteToStream $Stream $StdErrDestinationBuffer[0..([int]$StdErrBytesRead-1)] $EndPoint
           $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
         }
         if($StreamReadOperation.IsCompleted)
         {
-          $StreamBytesRead = $Stream.EndRead($StreamReadOperation)
+          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
           if($StreamBytesRead -eq 0){break}
           $Process.StandardInput.WriteLine($Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]).TrimEnd("`r").TrimEnd("`n"))
-          $StreamReadOperation = $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
+          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
         }
       }
     }
