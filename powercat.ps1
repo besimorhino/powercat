@@ -302,6 +302,7 @@ function powercat
 
       while($True)
       {
+        if(@($StreamBytesRead,$RelayStreamBytesRead).Contains(0)){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
@@ -326,6 +327,7 @@ function powercat
     {
       while($True)
       {
+        if($StreamBytesRead -eq 0){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           WriteToStream $Stream $Encoding.GetBytes((Read-Host) + "`n") $EndPoint
@@ -356,6 +358,7 @@ function powercat
       
       while($True)
       {
+        if($StreamBytesRead -eq 0){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
