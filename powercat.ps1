@@ -227,6 +227,7 @@ function powercat
     $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
     $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
     $Encoding = New-Object System.Text.AsciiEncoding
+    $StreamBytesRead = 1
     if($i -ne ""){WriteToStream $Stream $i $EndPoint}
   
     if($r -ne "")
@@ -300,9 +301,8 @@ function powercat
       $RelayStreamDestinationBuffer = New-Object System.Byte[] $RelayBufferSize
       $RelayStreamReadOperation = ReadFromRelayStream $RelayStream $RelayStreamDestinationBuffer $RelayBufferSize $RelayEndPoint
 
-      while($True)
+      while($StreamBytesRead -ne 0)
       {
-        if(@($StreamBytesRead,$RelayStreamBytesRead).Contains(0)){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
@@ -325,9 +325,8 @@ function powercat
     }
     elseif($e -eq "")
     {
-      while($True)
+      while($StreamBytesRead -ne 0)
       {
-        if($StreamBytesRead -eq 0){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           WriteToStream $Stream $Encoding.GetBytes((Read-Host) + "`n") $EndPoint
@@ -356,9 +355,8 @@ function powercat
       $StdErrDestinationBuffer = New-Object System.Byte[] 65536
       $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
       
-      while($True)
+      while($StreamBytesRead -ne 0)
       {
-        if($StreamBytesRead -eq 0){break}
         if($Host.UI.RawUI.KeyAvailable)
         {
           $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
