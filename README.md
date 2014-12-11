@@ -10,6 +10,8 @@ Netcat: The powershell version. (v2 compatible)
     -r    Relay. Format: "-r tcp:10.1.1.1:443"                 [String]
     -u    Transfer data over UDP.                              [Switch]
     -t    Timeout option. Default: 60                          [int32]
+    -i    Input byte array.                                    [byte[]]
+    -o    Output date in byte format.                          [Switch]
 ### General Usage Examples:
     Listen and Connect:
         powercat -l 443
