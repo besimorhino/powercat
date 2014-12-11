@@ -15,6 +15,10 @@
     Transfer data over UDP.
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
+  .PARAMETER i
+    Input byte array to send through the network stream.
+  .PARAMETER o
+    Output data in byte format.
 #>
 function powercat
 {
@@ -24,7 +28,8 @@ function powercat
     [switch]$l=$False,
     [string]$e="",
     [string]$r="",
-    [Parameter(ValueFromPipeline=$True)][string]$i="",
+    [byte[]]$i=$null,
+    [switch]$o=$False,
     [switch]$u=$False,
     $t=60
   )
@@ -228,7 +233,11 @@ function powercat
     $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
     $Encoding = New-Object System.Text.AsciiEncoding
     $StreamBytesRead = 1
+<<<<<<< HEAD
+    if($i -ne $null){WriteToStream $Stream $i $EndPoint}
+=======
     if($i -ne ""){WriteToStream $Stream $i $EndPoint}
+>>>>>>> 6698107e63f31008fe0a00f83ec1919a529d775d
   
     if($r -ne "")
     {
@@ -335,7 +344,8 @@ function powercat
         {
           $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
           if($StreamBytesRead -eq 0){break}
-          Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])
+          if($o){$StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]}
+          else{Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
           $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
         }
       }
