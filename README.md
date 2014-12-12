@@ -12,6 +12,7 @@ Netcat: The powershell version. (Powershell Version 2 and Later Supported)
     -t    Timeout option. Default: 60                          [int32]
     -i    Input: Filepath (string), byte array, or string.
     -o    Output Type: "Host", "Bytes", or "String"            [String]
+    -d    Disconnect after connecting.                         [Switch]
 ### General Usage Examples:
     Listen and Connect:
         powercat -l 443
