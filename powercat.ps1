@@ -20,7 +20,9 @@ function powercat
   .PARAMETER i
     Input filepath (string), byte array, or string.
   .PARAMETER o
-    Output data as a byte array or string.
+    Output data to Write-Host, as a byte array, or as a string.
+  .Parameter d
+    Disconnect immediately after connecting. Input from -i will still be sent.
 #>
   param(
     [alias("Client")][string]$c="",
@@ -31,7 +33,8 @@ function powercat
     [alias("UDP")][switch]$u=$False,
     [alias("Timeout")][int32]$t=60,
     [Parameter(ValueFromPipeline=$True)][alias("Input")]$i=$null,
-    [ValidateSet('Host', 'Bytes', 'String')][alias("OutputType")][string]$o="Host"
+    [ValidateSet('Host', 'Bytes', 'String')][alias("OutputType")][string]$o="Host",
+    [alias("Disconnect")][switch]$d=$False
   )
 
   if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
@@ -242,7 +245,8 @@ function powercat
       return
     }
     $OutputString = ""
-
+    if($d){return}
+    
     if($r -ne "")
     {
       if($r.Contains(":"))
