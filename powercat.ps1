@@ -233,12 +233,8 @@ function powercat
     $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
     $Encoding = New-Object System.Text.AsciiEncoding
     $StreamBytesRead = 1
-<<<<<<< HEAD
     if($i -ne $null){WriteToStream $Stream $i $EndPoint}
-=======
-    if($i -ne ""){WriteToStream $Stream $i $EndPoint}
->>>>>>> 6698107e63f31008fe0a00f83ec1919a529d775d
-  
+
     if($r -ne "")
     {
       if($r.Contains(":"))
