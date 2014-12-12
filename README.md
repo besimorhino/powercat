@@ -10,8 +10,8 @@ Netcat: The powershell version. (v2 compatible)
     -r    Relay. Format: "-r tcp:10.1.1.1:443"                 [String]
     -u    Transfer data over UDP.                              [Switch]
     -t    Timeout option. Default: 60                          [int32]
-    -i    Input byte array.                                    [byte[]]
-    -o    Output date in byte format.                          [Switch]
+    -i    Input: Filepath (string), byte array, or string.
+    -o    Output Type: "Host", "Bytes", or "String"            [String]
 ### General Usage Examples:
     Listen and Connect:
         powercat -l 443
@@ -20,9 +20,11 @@ Netcat: The powershell version. (v2 compatible)
         powercat -l -e cmd.exe 443
         powercat -c 10.1.1.10 -e cmd.exe 443
     Output to a File:
-        [IO.File]::WriteAllBytes('C:\outputfile',(powercat -o -l -p 8000))
+        powercat -l -p 8000 -o "String" | Out-File C:\outputfile
+        [IO.File]::WriteAllBytes("C:\outputfile",(powercat -l -p 8000 -o "Bytes"))
     Send a File:
-        powercat -i ([IO.File]::ReadAllBytes('C:\inputfile')) -c 10.1.1.10 -p 443
+        powercat -c 10.1.1.10 -p 443 -i "C:\inputfile"
+        ([IO.File]::ReadAllBytes('C:\inputfile')) | powercat -c 10.1.1.10 -p 443
 ### powercat Relay Examples:
     Listener to Client Relay (TCP to TCP):
         powercat -l -p 8000 -r tcp:10.1.1.16:443
