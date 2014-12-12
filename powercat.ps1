@@ -1,3 +1,5 @@
+function powercat
+{
 <#
   .SYNOPSIS
     Netcat: The powershell version.
@@ -16,22 +18,20 @@
   .PARAMETER t
     Timeout for connecting and listening in seconds. Default is 60.
   .PARAMETER i
-    Input byte array to send through the network stream.
+    Input filepath (string), byte array, or string.
   .PARAMETER o
-    Output data in byte format.
+    Output data as a byte array or string.
 #>
-function powercat
-{
   param(
-    [string]$c="",
-    [Parameter(Mandatory=$True,Position=-1)][string]$p="",
-    [switch]$l=$False,
-    [string]$e="",
-    [string]$r="",
-    [byte[]]$i=$null,
-    [switch]$o=$False,
-    [switch]$u=$False,
-    $t=60
+    [alias("Client")][string]$c="",
+    [alias("Listen")][switch]$l=$False,
+    [alias("Port")][Parameter(Mandatory=$True,Position=-1)][string]$p="",
+    [alias("Execute")][string]$e="",
+    [alias("Relay")][string]$r="",
+    [alias("UDP")][switch]$u=$False,
+    [alias("Timeout")][int32]$t=60,
+    [Parameter(ValueFromPipeline=$True)][alias("Input")]$i=$null,
+    [ValidateSet('Host', 'Bytes', 'String')][alias("OutputType")][string]$o="Host"
   )
 
   if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
@@ -233,7 +233,15 @@ function powercat
     $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
     $Encoding = New-Object System.Text.AsciiEncoding
     $StreamBytesRead = 1
-    if($i -ne $null){WriteToStream $Stream $i $EndPoint}
+    if($i -ne $null)
+    {
+      if(Test-Path $i){WriteToStream $Stream ([io.file]::ReadAllBytes($i)) $EndPoint}
+      elseif($i.GetType().Name -eq "Byte[]"){WriteToStream $Stream $i $EndPoint}
+      elseif($i.GetType().Name -eq "String"){WriteToStream $Stream $Encoding.GetBytes($i) $EndPoint}
+      else{return "Unrecognised input type."}
+      return
+    }
+    $OutputString = ""
 
     if($r -ne "")
     {
@@ -340,8 +348,12 @@ function powercat
         {
           $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
           if($StreamBytesRead -eq 0){break}
-          if($o){$StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]}
-          else{Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
+          switch($o)
+          {
+            "Host" {Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
+            "String" {$OutputString += $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
+            "Bytes" {$StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]}
+          }
           $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
         }
       }
@@ -393,6 +405,7 @@ function powercat
   }
   finally
   {
+    if($o -eq "String"){$OutputString}
     $ErrorActionPreference= 'SilentlyContinue'
     try{$Process | Stop-Process}
     catch{}
