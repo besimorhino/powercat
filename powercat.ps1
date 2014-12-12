@@ -20,7 +20,7 @@ function powercat
   .PARAMETER i
     Input filepath (string), byte array, or string.
   .PARAMETER o
-    Output data to Write-Host, as a byte array, or as a string.
+    Output data to Write-Host, in byte format, or in string format.
   .Parameter d
     Disconnect immediately after connecting. Input from -i will still be sent.
 #>
