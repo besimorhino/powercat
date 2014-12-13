@@ -154,7 +154,12 @@ function powercat
       $Stopwatch.Stop()
       $Encoding = New-Object System.Text.AsciiEncoding
       Write-Verbose ("Connection from [" + $EndPoint.Address.IPAddressToString + "] port " + $p + " [udp] accepted (source port " + $EndPoint.Port + ")")
-      Write-Host -n $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])
+      switch($o)
+      {
+        "Host" {Write-Host -n $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])}
+        "String" {$OutputString += $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])}
+        "Bytes" {$SocketDestinationBuffer[0..([int]$SocketBytesRead-1)]}
+      }
     }
     else
     {
