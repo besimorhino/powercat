@@ -69,7 +69,7 @@ powercat supports more than sending data over TCP. Specify -u to enable UDP Mode
     Send Data Over UDP:
         powercat -c 10.1.1.1 -p 8000 -u
         powercat -l -p 8000 -u
-    Send Data To the c2.example.com dnscat2 server, sending queries to the dns server on 10.1.1.1:
+    Connect to the c2.example.com dnscat2 server using the DNS server on 10.1.1.1:
         powercat -c 10.1.1.1 -p 53 -dns c2.example.com
 
 Relays
