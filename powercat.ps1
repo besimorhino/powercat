@@ -124,8 +124,15 @@ Examples:
   ############### VALIDATE ARGS ###############
   $global:Verbose = $Verbose
   if($of -ne ''){$o = 'Bytes'}
-  if($p -eq ""){return "Please provide a port number to -p."}
-  if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
+  if($dns -eq "")
+  {
+    if((($c -eq "") -and (!$l)) -or (($c -ne "") -and $l)){return "You must select either client mode (-c) or listen mode (-l)."}
+    if($p -eq ""){return "Please provide a port number to -p."}
+  }
+  else
+  {
+    if($p -eq ""){$p = "53"}
+  }
   if(((($r -ne "") -and ($e -ne "")) -or (($e -ne "") -and ($ep))) -or  (($r -ne "") -and ($ep))){return "You can only pick one of these: -e, -ep, -r"}
   if(($i -ne $null) -and (($r -ne "") -or ($e -ne ""))){return "-i is not applicable here."}
   if($l)
