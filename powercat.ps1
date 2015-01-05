@@ -421,7 +421,8 @@ Examples:
   function Close_DNS
   {
     param($FuncVars)
-    Invoke-Command $FuncVars["SendPacket"] -ArgumentList @((Invoke-Command $FuncVars["Create_FIN"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["Tag"],$FuncVars["Domain"]))) | Out-Null
+    $FINPacket = Invoke-Command $FuncVars["Create_FIN"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["Tag"],$FuncVars["Domain"])
+    Invoke-Command $FuncVars["SendPacket"] -ArgumentList @($FINPacket,$FuncVars["DNSServer"],$FuncVars["DNSPort"]) | Out-Null
   }
   ############### DNS FUNCTIONS ###############
   
