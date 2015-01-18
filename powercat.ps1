@@ -169,7 +169,7 @@ Examples:
       {
         if($Host.UI.RawUI.KeyAvailable)
         {
-          if(@(17,27).Contains($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode))
+          if(@(17,27) -contains ($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode))
           {
             Write-Verbose "CTRL or ESC caught. Stopping UDP Setup..."
             $FuncVars["Socket"].Close()
@@ -458,7 +458,7 @@ Examples:
     {
       if($Host.UI.RawUI.KeyAvailable)
       {
-        if(@(17,27).Contains($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode))
+        if(@(17,27) -contains ($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode))
         {
           Write-Verbose "CTRL or ESC caught. Stopping TCP Setup..."
           if($FuncVars["l"]){$Socket.Stop()}
