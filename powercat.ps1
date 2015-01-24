@@ -292,14 +292,14 @@ Examples:
       if((($Packet.Length)%2 -eq 1) -or ($Packet.Length -eq 0)){return 1}
       $AcknowledgementNumber = ($Packet[10..13] -join "")
       $SeqNum = ($Packet[14..17] -join "")
-      $ReturningData = ""
+      [byte[]]$ReturningData = @()
       
       if($Packet.Length -gt 18)
       {
         $PacketElim = $Packet.Substring(18)
         while($PacketElim.Length -gt 0)
         {
-          $ReturningData += [string][char][Convert]::ToInt16(($PacketElim[0..1] -join ""),16)
+          $ReturningData += [byte[]][Convert]::ToInt16(($PacketElim[0..1] -join ""),16)
           $PacketElim = $PacketElim.Substring(2)
         }
       }
@@ -387,7 +387,7 @@ Examples:
       $PacketsData = @("0000")
     }
     
-    $ReturningData = ""
+    [byte[]]$ReturningData = @()
     foreach($PacketData in $PacketsData)
     {
       try{$MSGPacket = Invoke-Command $FuncVars["Create_MSG"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["AckNum"],$PacketData,$FuncVars["Tag"],$FuncVars["Domain"])}
@@ -408,13 +408,11 @@ Examples:
     
     if($FuncVars["Failures"] -ge $FuncVars["FailureThreshold"]){break}
     
-    [byte[]]$Data = @()
-    if($ReturningData -ne "")
+    if($ReturningData -ne @())
     {
       $FuncVars["AckNum"] = (Invoke-Command $FuncVars["AckData"] -ArgumentList @($ReturningData,$FuncVars["AckNum"]))
-      $Data = $FuncVars["Encoding"].GetBytes($ReturningData)
     }
-    return $Data,$FuncVars
+    return $ReturningData,$FuncVars
   }
   function WriteData_DNS
   {
