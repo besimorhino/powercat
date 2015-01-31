@@ -595,9 +595,10 @@ Examples:
   ########## POWERSHELL FUNCTIONS ##########
   function Main_Powershell
   {
-    param($Stream1SetupVars)
+    param($Stream1SetupVars)   
     try
     {
+      $encoding = New-Object System.Text.AsciiEncoding
       [byte[]]$InputToWrite = @()
       if($i -ne $null)
       {
@@ -644,8 +645,8 @@ Examples:
           $ReturnedData = $null
           if($CommandToExecute -ne "")
           {
-            try{[byte[]]$ReturnedData = $Encoding.GetBytes((IEX $CommandToExecute 2>&1 | Out-String))}
-            catch{}
+            try{[byte[]]$ReturnedData = $Encoding.GetBytes((IEX $CommandToExecute 2>&1 3>&1 4>&1 5>&1 | Out-String))}
+            catch{[byte[]]$ReturnedData = $Encoding.GetBytes(($_ | Out-String))}
             $Prompt = $Encoding.GetBytes(("PS " + (pwd).Path + "> "))
           }
           $Data += $IntroPrompt
