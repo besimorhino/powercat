@@ -86,6 +86,10 @@ Relays in powercat work just like traditional netcat relays, but you don't have 
         powercat -l -p 8000 -r dns:10.1.1.1:53:c2.example.com
     TCP Listener to DNS Client Relay using the Windows Default DNS Server
         powercat -l -p 8000 -r dns:::c2.example.com
+    TCP Client to Client Relay
+        powercat -c 10.1.1.1 -p 9000 -r tcp:10.1.1.16:443
+    TCP Listener to Listener Relay
+        powercat -l -p 8000 -r tcp:9000
 
 Generate Payloads
 -----------------
