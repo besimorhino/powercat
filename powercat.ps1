@@ -317,12 +317,8 @@ Examples:
     $FuncVars = @{}
     $FuncVars["DNSServer"],$FuncVars["DNSPort"],$FuncVars["Domain"],$FuncVars["FailureThreshold"] = $FuncSetupVars
     if($FuncVars["DNSPort"] -eq ''){$FuncVars["DNSPort"] = "53"}
-    $FuncVars["Tag"] = "dnscat."
-    if($FuncVars["Domain"] -ne "")
-    {
-      $FuncVars["Tag"] = ""
-      $FuncVars["Domain"] = ("." + $FuncVars["Domain"])
-    }
+    $FuncVars["Tag"] = ""
+    $FuncVars["Domain"] = ("." + $FuncVars["Domain"])
     
     $FuncVars["Create_SYN"] = ${function:Create_SYN}
     $FuncVars["Create_MSG"] = ${function:Create_MSG}
@@ -836,7 +832,7 @@ Examples:
     $FunctionString += ("function Stream1_WriteData`n{`n" + ${function:WriteData_DNS} + "`n}`n`n")
     $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_DNS} + "`n}`n`n")
     if($l){return "This feature is not available."}
-    else{$InvokeString = "Main @('$c','$p','$Domain',$dnsft) "}
+    else{$InvokeString = "Main @('$c','$p','$dns',$dnsft) "}
   }
   else
   {
