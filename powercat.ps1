@@ -269,20 +269,19 @@ Examples:
     function Create_SYN
     {
       param($SessionId,$SeqNum,$Tag,$Domain)
-      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".00." + $SessionId + "." + $SeqNum + ".0000" + $Domain)
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + "00" + $SessionId + $SeqNum + "0000" + $Domain)
     }
     
     function Create_FIN
     {
       param($SessionId,$Tag,$Domain)
-      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".02." + $SessionId + ".00" + $Domain)
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + "02" + $SessionId + "00" + $Domain)
     }
     
     function Create_MSG
     {
       param($SessionId,$SeqNum,$AcknowledgementNumber,$Data,$Tag,$Domain)
-      if($Data -eq ""){$Data = "0000"}
-      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + ".01." + $SessionId + "." + $SeqNum + "." + $AcknowledgementNumber + "." + $Data + $Domain)
+      return ($Tag + ([string](Get-Random -Maximum 9999 -Minimum 1000)) + "01" + $SessionId + $SeqNum + $AcknowledgementNumber + $Data + $Domain)
     }
     
     function DecodePacket
@@ -339,7 +338,7 @@ Examples:
     $ReturningData = $DecodedPacket[1]
     if($ReturningData -ne ""){$FuncVars["InputData"] = ""}
     $FuncVars["AckNum"] = $DecodedPacket[2]
-    $FuncVars["MaxMSGDataSize"] = (250 - (Invoke-Command $FuncVars["Create_MSG"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["AckNum"],"",$FuncVars["Tag"],$FuncVars["Domain"])).Length)
+    $FuncVars["MaxMSGDataSize"] = (244 - (Invoke-Command $FuncVars["Create_MSG"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["SeqNum"],$FuncVars["AckNum"],"",$FuncVars["Tag"],$FuncVars["Domain"])).Length)
     if($FuncVars["MaxMSGDataSize"] -le 0){return "Domain name is too long."}
     return $FuncVars
   }
@@ -380,7 +379,7 @@ Examples:
     }
     else
     {
-      $PacketsData = @("0000")
+      $PacketsData = @("")
     }
     
     [byte[]]$ReturningData = @()
