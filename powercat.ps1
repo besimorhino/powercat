@@ -792,7 +792,7 @@ Examples:
     {
       try
       {
-        Write-Verbose "Closing Stream 2..."
+        #Write-Verbose "Closing Stream 2..."
         Stream2_Close $Stream2Vars
       }
       catch
@@ -801,7 +801,7 @@ Examples:
       }
       try
       {
-        Write-Verbose "Closing Stream 1..."
+        #Write-Verbose "Closing Stream 1..."
         Stream1_Close $Stream1Vars
       }
       catch
