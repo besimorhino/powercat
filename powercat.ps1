@@ -477,7 +477,7 @@ Examples:
             $Socket.EndConnect($Handle)
             $Stream = $Socket.GetStream()
             $BufferSize = $Socket.ReceiveBufferSize
-            Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeeded!")
+            Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp] succeeded!")
           }
           catch{$Socket.Close(); $Stopwatch.Stop(); break}
         }
