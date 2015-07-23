@@ -734,6 +734,7 @@ Examples:
     try
     {
       [byte[]]$InputToWrite = @()
+      $Encoding = New-Object System.Text.AsciiEncoding
       if($i -ne $null)
       {
         Write-Verbose "Input from -i detected..."
