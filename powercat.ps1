@@ -3,16 +3,6 @@ function powercat
     <#
     .Synopsis
        Netcat: The powershell version. (Powershell V2 and Later Supported)
-    .DESCRIPTION
-       Lange Beschreibung
-    .EXAMPLE
-       Beispiel für die Verwendung dieses Cmdlets
-    .EXAMPLE
-       Ein weiteres Beispiel für die Verwendung dieses Cmdlets
-    .INPUTS
-       Eingaben in dieses Cmdlet (falls vorhanden)
-    .OUTPUTS
-       Ausgabe dieses Cmdlets (falls vorhanden)
     .NOTES
        powercat - Netcat, The Powershell Version
        Github Repository: https://github.com/besimorhino/powercat
@@ -20,14 +10,6 @@ function powercat
        This script attempts to implement the features of netcat in a powershell
        script. It also contains extra features such as built-in relays, execute
        powershell, and a dnscat2 client.
-    .COMPONENT
-       Die Komponente, zu der dieses Cmdlet gehört
-    .ROLE
-       Die Rolle, zu der dieses Cmdlet gehört
-    .FUNCTIONALITY
-       Die Funktionalität, die dieses Cmdlet am besten beschreibt
-
-
     .PARAMETER c
        Client Mode. Provide the IP of the system you wish to connect to.
        If you are using -dns, specify the DNS Server to send queries to.
@@ -86,7 +68,6 @@ function powercat
        can be executed in this way: powershell -E <encoded string>
     .PARAMETER h
        Print help
-
     .EXAMPLE
        powercat -l -p 8000
        Listen on port 8000 and print the output to the console.
@@ -117,16 +98,17 @@ function powercat
 
   [CmdletBinding()]
   param(
-    [Parameter(ParameterSetName='ClientMode',Mandatory=$true,Position=0)]
+    [Parameter(Mandatory=$true,Position=0,ParameterSetName='ClientMode')]
     [alias("Client")]
     [string]$c="",
 
-    [Parameter(ParameterSetName='ListenMode',Mandatory=$true,Position=0)]
+    [Parameter(Mandatory=$true,Position=0,ParameterSetName='ListenMode')]
     [alias("Listen")]
     [switch]$l,
 
     [Parameter(Position=1)]
-    [alias("Port")][string]$p="",
+    [alias("Port")]
+    [string]$p="",
 
     [alias("Execute")]
     [string]$e="",
@@ -134,7 +116,6 @@ function powercat
     [alias("ExecutePowershell")]
     [switch]$ep,
 
-    [Parameter(ParameterSetName='Relay')]
     [alias("Relay")]
     [string]$r="",
 
@@ -184,12 +165,12 @@ function powercat
       Write-Host ("For full help run:`tGet-Help {0} -Full" -f $MyInvocation.InvocationName)
   }
   
-  ############### VALIDATE ARGS ###############
-  $global:Verbose = $Verbose
+  #region ############### VALIDATE ARGS ###############
+
   if($of -ne ''){$o = 'Bytes'}
   if($dns -eq "")
   { 
-    if($p -eq ""){return "Please provide a port number to -p."}
+    if($p -eq ""){return "`nPlease provide a port number to -p."}
   }
   if(((($r -ne "") -and ($e -ne "")) -or (($e -ne "") -and ($ep))) -or  (($r -ne "") -and ($ep))){return "You can only pick one of these: -e, -ep, -r"}
   if(($i -ne $null) -and (($r -ne "") -or ($e -ne ""))){return "-i is not applicable here."}
@@ -208,9 +189,9 @@ function powercat
       if($Failure){break}
     }
   }
-  ############### VALIDATE ARGS ###############
+  #endregion ############### VALIDATE ARGS ###############
   
-  ############### UDP FUNCTIONS ###############
+  #region ############### UDP FUNCTIONS ###############
   function Setup_UDP
   {
     param($FuncSetupVars)
@@ -304,9 +285,9 @@ function powercat
     param($FuncVars)
     $FuncVars["Socket"].Close()
   }
-  ############### UDP FUNCTIONS ###############
+  #endregion ############### UDP FUNCTIONS ###############
   
-  ############### DNS FUNCTIONS ###############
+  #region ############### DNS FUNCTIONS ###############
   function Setup_DNS
   {
     param($FuncSetupVars)
@@ -483,9 +464,9 @@ function powercat
     $FINPacket = Invoke-Command $FuncVars["Create_FIN"] -ArgumentList @($FuncVars["SessionId"],$FuncVars["Tag"],$FuncVars["Domain"])
     Invoke-Command $FuncVars["SendPacket"] -ArgumentList @($FINPacket,$FuncVars["DNSServer"],$FuncVars["DNSPort"]) | Out-Null
   }
-  ############### DNS FUNCTIONS ###############
+  #endregion ############### DNS FUNCTIONS ###############
   
-  ########## TCP FUNCTIONS ##########
+  #region ########## TCP FUNCTIONS ##########
   function Setup_TCP
   {
     param($FuncSetupVars)
@@ -592,9 +573,9 @@ function powercat
     if($FuncVars["l"]){$FuncVars["Socket"].Stop()}
     else{$FuncVars["Socket"].Close()}
   }
-  ########## TCP FUNCTIONS ##########
+  #endregion ########## TCP FUNCTIONS ##########
   
-  ########## CMD FUNCTIONS ##########
+  #region ########## CMD FUNCTIONS ##########
   function Setup_CMD
   {
     param($FuncSetupVars)
@@ -647,9 +628,9 @@ function powercat
     param($FuncVars)
     $FuncVars["Process"] | Stop-Process
   }  
-  ########## CMD FUNCTIONS ##########
+  #endregion ########## CMD FUNCTIONS ##########
   
-  ########## POWERSHELL FUNCTIONS ##########
+  #region ########## POWERSHELL FUNCTIONS ##########
   function Main_Powershell
   {
     param($Stream1SetupVars)   
@@ -746,9 +727,9 @@ function powercat
       }
     }
   }
-  ########## POWERSHELL FUNCTIONS ##########
+  #endregion ########## POWERSHELL FUNCTIONS ##########
 
-  ########## CONSOLE FUNCTIONS ##########
+  #region ########## CONSOLE FUNCTIONS ##########
   function Setup_Console
   {
     param($FuncSetupVars)
@@ -787,9 +768,9 @@ function powercat
     elseif($FuncVars["OutputBytes"] -ne @()){return $FuncVars["OutputBytes"]}
     return
   }
-  ########## CONSOLE FUNCTIONS ##########
+  #endregion ########## CONSOLE FUNCTIONS ##########
   
-  ########## MAIN FUNCTION ##########
+  #region ########## MAIN FUNCTION ##########
   function Main
   {
     param($Stream1SetupVars,$Stream2SetupVars)
@@ -873,9 +854,9 @@ function powercat
       }
     }
   }
-  ########## MAIN FUNCTION ##########
+  #endregion ########## MAIN FUNCTION ##########
   
-  ########## GENERATE PAYLOAD ##########
+  #region ########## GENERATE PAYLOAD ##########
   if($u)
   {
     Write-Verbose "Set Stream 1: UDP"
@@ -970,12 +951,12 @@ function powercat
   if($ep){$FunctionString += ("function Main`n{`n" + ${function:Main_Powershell} + "`n}`n`n")}
   else{$FunctionString += ("function Main`n{`n" + ${function:Main} + "`n}`n`n")}
   $InvokeString = ($FunctionString + $InvokeString)
-  ########## GENERATE PAYLOAD ##########
+  #endregion ########## GENERATE PAYLOAD ##########
   
-  ########## RETURN GENERATED PAYLOADS ##########
+  #region ########## RETURN GENERATED PAYLOADS ##########
   if($ge){Write-Verbose "Returning Encoded Payload..." ; return [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($InvokeString))}
   elseif($g){Write-Verbose "Returning Payload..." ; return $InvokeString}
-  ########## RETURN GENERATED PAYLOADS ##########
+  #endregion ########## RETURN GENERATED PAYLOADS ##########
   
   #region ########## EXECUTION ##########
   $Output = $null
