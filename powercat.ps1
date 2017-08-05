@@ -606,7 +606,7 @@ Examples:
     
       Write-Verbose "Setting up Stream 1... (ESC/CTRL to exit)"
       try{$Stream1Vars = Stream1_Setup $Stream1SetupVars}
-      catch{Write-Verbose "Stream 1 Setup Failure" ; break}
+      catch{Write-Verbose "Stream 1 Setup Failure" ; return}
       
       Write-Verbose "Setting up Stream 2... (ESC/CTRL to exit)"
       try
@@ -618,17 +618,17 @@ Examples:
       }
       catch
       {
-        Write-Verbose "Stream 2 Setup Failure" ; break
+        Write-Verbose "Stream 2 Setup Failure" ; return
       }
       
       if($InputToWrite -ne @())
       {
         Write-Verbose "Writing input to Stream 1..."
         try{$Stream1Vars = Stream1_WriteData $InputToWrite $Stream1Vars}
-        catch{Write-Host "Failed to write input to Stream 1" ; break}
+        catch{Write-Host "Failed to write input to Stream 1" ; return}
       }
       
-      if($d){Write-Verbose "-d (disconnect) Activated. Disconnecting..." ; break}
+      if($d){Write-Verbose "-d (disconnect) Activated. Disconnecting..." ; return}
       
       Write-Verbose "Both Communication Streams Established. Redirecting Data Between Streams..."
       while($True)
@@ -656,7 +656,7 @@ Examples:
         }
         catch
         {
-          Write-Verbose "Failed to redirect data from Stream 2 to Stream 1" ; break
+          Write-Verbose "Failed to redirect data from Stream 2 to Stream 1" ; return
         }
         
         try
@@ -668,7 +668,7 @@ Examples:
         }
         catch
         {
-          Write-Verbose "Failed to redirect data from Stream 1 to Stream 2" ; break
+          Write-Verbose "Failed to redirect data from Stream 1 to Stream 2" ; return
         }
       }
     }
@@ -747,11 +747,11 @@ Examples:
       
       Write-Verbose "Setting up Stream 1..."
       try{$Stream1Vars = Stream1_Setup $Stream1SetupVars}
-      catch{Write-Verbose "Stream 1 Setup Failure" ; break}
+      catch{Write-Verbose "Stream 1 Setup Failure" ; return}
       
       Write-Verbose "Setting up Stream 2..."
       try{$Stream2Vars = Stream2_Setup $Stream2SetupVars}
-      catch{Write-Verbose "Stream 2 Setup Failure" ; break}
+      catch{Write-Verbose "Stream 2 Setup Failure" ; return}
       
       $Data = $null
       
@@ -759,10 +759,10 @@ Examples:
       {
         Write-Verbose "Writing input to Stream 1..."
         try{$Stream1Vars = Stream1_WriteData $InputToWrite $Stream1Vars}
-        catch{Write-Host "Failed to write input to Stream 1" ; break}
+        catch{Write-Host "Failed to write input to Stream 1" ; return}
       }
       
-      if($d){Write-Verbose "-d (disconnect) Activated. Disconnecting..." ; break}
+      if($d){Write-Verbose "-d (disconnect) Activated. Disconnecting..." ; return}
       
       Write-Verbose "Both Communication Streams Established. Redirecting Data Between Streams..."
       while($True)
@@ -770,25 +770,25 @@ Examples:
         try
         {
           $Data,$Stream2Vars = Stream2_ReadData $Stream2Vars
-          if($Data.Length -eq 0){Start-Sleep -Milliseconds 100}
+          if(($Data.Length -eq 0) -or ($Data -eq $null)){Start-Sleep -Milliseconds 100}
           if($Data -ne $null){$Stream1Vars = Stream1_WriteData $Data $Stream1Vars}
           $Data = $null
         }
         catch
         {
-          Write-Verbose "Failed to redirect data from Stream 2 to Stream 1" ; break
+          Write-Verbose "Failed to redirect data from Stream 2 to Stream 1" ; return
         }
         
         try
         {
           $Data,$Stream1Vars = Stream1_ReadData $Stream1Vars
-          if($Data.Length -eq 0){Start-Sleep -Milliseconds 100}
+          if(($Data.Length -eq 0) -or ($Data -eq $null)){Start-Sleep -Milliseconds 100}
           if($Data -ne $null){$Stream2Vars = Stream2_WriteData $Data $Stream2Vars}
           $Data = $null
         }
         catch
         {
-          Write-Verbose "Failed to redirect data from Stream 1 to Stream 2" ; break
+          Write-Verbose "Failed to redirect data from Stream 1 to Stream 2" ; return
         }
       }
     }
