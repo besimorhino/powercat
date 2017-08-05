@@ -64,7 +64,7 @@ powercat can be used to send and serve shells. Specify an executable to -e, or u
 
 DNS and UDP
 -----------
-powercat supports more than sending data over TCP. Specify -u to enable UDP Mode. Data can also be sent to a [dnscat2 server](https://github.com/iagox86/dnscat2) with -dns.
+powercat supports more than sending data over TCP. Specify -u to enable UDP Mode. Data can also be sent to a [dnscat2 server](https://github.com/iagox86/dnscat2) with -dns. **Make sure to add "-e open --no-cache" when running the dnscat2 server.**
 ###
     Send Data Over UDP:
         powercat -c 10.1.1.1 -p 8000 -u
