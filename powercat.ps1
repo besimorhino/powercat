@@ -662,6 +662,7 @@ Examples:
         try
         {
           $Data,$Stream1Vars = Stream1_ReadData $Stream1Vars
+          if($Data.Length -eq 0){Start-Sleep -Milliseconds 100}
           if($Data -ne $null){$CommandToExecute = $Encoding.GetString($Data)}
           $Data = $null
         }
@@ -769,6 +770,7 @@ Examples:
         try
         {
           $Data,$Stream2Vars = Stream2_ReadData $Stream2Vars
+          if($Data.Length -eq 0){Start-Sleep -Milliseconds 100}
           if($Data -ne $null){$Stream1Vars = Stream1_WriteData $Data $Stream1Vars}
           $Data = $null
         }
@@ -780,6 +782,7 @@ Examples:
         try
         {
           $Data,$Stream1Vars = Stream1_ReadData $Stream1Vars
+          if($Data.Length -eq 0){Start-Sleep -Milliseconds 100}
           if($Data -ne $null){$Stream2Vars = Stream2_WriteData $Data $Stream2Vars}
           $Data = $null
         }
