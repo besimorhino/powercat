@@ -48,7 +48,7 @@ powercat can be used to transfer files back and forth using -i (Input) and -of (
 ###
     Send File:
         powercat -c 10.1.1.1 -p 443 -i C:\inputfile
-    Recieve File:
+    Receive File:
         powercat -l -p 8000 -of C:\inputfile
 
 Shells
