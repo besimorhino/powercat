@@ -8,6 +8,7 @@ function powercat
     [alias("ExecutePowershell")][switch]$ep=$False,
     [alias("Relay")][string]$r="",
     [alias("UDP")][switch]$u=$False,
+    [alias("SSLName")][string]$ssl="",
     [alias("dnscat2")][string]$dns="",
     [alias("DNSFailureThreshold")][int32]$dnsft=10,
     [alias("Timeout")][int32]$t=60,
@@ -61,6 +62,9 @@ Usage: powercat [-c or -l] [-p port] [options]
   -dnsft <int>    DNS Failure Threshold. This is how many bad packets the client can
                   recieve before exiting. Set to zero when receiving files, and set high
                   for more stability over the internet.
+				  
+  -ssl <name>     SSL Mode. Specifiy the common name of the certificate.  Listener mode
+                  will automatically generate a certificate.
             
   -t  <int>       Timeout. The number of seconds to wait before giving up on listening or
                   connecting. Default: 60
@@ -531,7 +535,578 @@ Examples:
     else{$FuncVars["Socket"].Close()}
   }
   ########## TCP FUNCTIONS ##########
+
+  ########## TCP/SSL FUNCTIONS ##########
+  function Setup_TCPSSL
+  {
+    param($FuncSetupVars)
+    $c,$l,$p,$t = $FuncSetupVars
+    if($global:Verbose){$Verbose = $True}
+    $FuncVars = @{}
+    if(!$l)
+    {
+      $FuncVars["l"] = $False
+      $Socket = New-Object System.Net.Sockets.TcpClient
+      Write-Verbose "Connecting..."
+      $Handle = $Socket.BeginConnect($c,$p,$null,$null)      
+    }
+    else
+    {
+      $FuncVars["l"] = $True
+      Write-Verbose ("Listening on [0.0.0.0] (port " + $p + ")")
+      $Socket = New-Object System.Net.Sockets.TcpListener $p
+      $Socket.Start()
+      $Handle = $Socket.BeginAcceptTcpClient($null, $null)
+    }
+    
+    $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while($True)
+    {
+      if($Host.UI.RawUI.KeyAvailable)
+      {
+        if(@(17,27) -contains ($Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode))
+        {
+          Write-Verbose "CTRL or ESC caught. Stopping TCP Setup..."
+          if($FuncVars["l"]){$Socket.Stop()}
+          else{$Socket.Close()}
+          $Stopwatch.Stop()
+          break
+          
+        }
+      }
+      if($Stopwatch.Elapsed.TotalSeconds -gt $t)
+      {
+        if(!$l){$Socket.Close()}
+        else{$Socket.Stop()}
+        $Stopwatch.Stop()
+        Write-Verbose "Timeout!" ; break
+        break
+      }
+      if($Handle.IsCompleted)
+      {
+        if(!$l)
+        {
+          try
+          {
+            $Socket.EndConnect($Handle)
+            $Stream = $Socket.GetStream()
+            $BufferSize = $Socket.ReceiveBufferSize
+            $SSLStream = New-Object System.Net.Security.SslStream($Stream, $FALSE, 
+              {
+              param($sender, $cert, $chain, $policy)
+                return $TRUE;
+              }
+            )
+            $SSLStream.AuthenticateAsClient($ssl)
+            Write-Verbose ("Connection to " + $c + ":" + $p + " [tcp/ssl] succeeded!")
+            Write-Verbose ("IsEncrypted: " + $SSLStream.IsEncrypted)
+          }
+          catch{$Socket.Close(); $Stopwatch.Stop(); break}
+          
+        }
+        else
+        {
+          $Client = $Socket.EndAcceptTcpClient($Handle)
+          $Stream = $Client.GetStream()
+          $SSLStream = New-Object System.Net.Security.SslStream($Stream)
+          try
+          {
+            $cert = GenerateX509Cert ("cn="+$ssl) ([System.DateTime]::Now.AddDays(-1)) ([System.DateTime]::Now.AddYears(1))
+            Write-Verbose $cert
+            $SSLStream.AuthenticateAsServer($cert)
+            Write-Verbose $SSLStream.ToString()
+          }
+          catch{$Socket.Close(); $Stopwatch.Stop(); break}
+          
+          $BufferSize = $Client.ReceiveBufferSize
+          Write-Verbose ("Connection from [" + $Client.Client.RemoteEndPoint.Address.IPAddressToString + "] port " + $port + " [tcp/ssl] accepted (source port " + $Client.Client.RemoteEndPoint.Port + ")")
+          Write-Verbose ("IsEncrypted: " + $SSLStream.IsEncrypted)
+        }
+        break
+      }
+    }
+    $Stopwatch.Stop()
+    if($Socket -eq $null){break}
+    $FuncVars["Stream"] = $SSLStream
+    $FuncVars["Socket"] = $Socket
+    $FuncVars["BufferSize"] = $BufferSize
+    $FuncVars["StreamDestinationBuffer"] = (New-Object System.Byte[] $FuncVars["BufferSize"])
+    $FuncVars["StreamReadOperation"] = $FuncVars["Stream"].BeginRead($FuncVars["StreamDestinationBuffer"], 0, $FuncVars["BufferSize"], $null, $null)
+    $FuncVars["Encoding"] = New-Object System.Text.AsciiEncoding
+    $FuncVars["StreamBytesRead"] = 1
+    return $FuncVars
+  }
+  function ReadData_TCPSSL
+  {
+    param($FuncVars)
+    $Data = $null
+    if($FuncVars["StreamBytesRead"] -eq 0){break}
+    if($FuncVars["StreamReadOperation"].IsCompleted)
+    {
+      $StreamBytesRead = $FuncVars["Stream"].EndRead($FuncVars["StreamReadOperation"])
+      if($StreamBytesRead -eq 0){break}
+      $Data = $FuncVars["StreamDestinationBuffer"][0..([int]$StreamBytesRead-1)]
+      $FuncVars["StreamReadOperation"] = $FuncVars["Stream"].BeginRead($FuncVars["StreamDestinationBuffer"], 0, $FuncVars["BufferSize"], $null, $null)
+    }
+    return $Data,$FuncVars
+  }
+  function WriteData_TCPSSL
+  {
+    param($Data,$FuncVars)
+    $FuncVars["Stream"].Write($Data, 0, $Data.Length)
+    return $FuncVars
+  }
+  function Close_TCPSSL
+  {
+    param($FuncVars)
+    try{$FuncVars["Stream"].Close()}
+    catch{}
+    if($FuncVars["l"]){$FuncVars["Socket"].Stop()}
+    else{$FuncVars["Socket"].Close()}
+  }
+  ########## TCP/SSL FUNCTIONS ##########
   
+  ########## SSL Cert Generation ########
+
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
+using System.Runtime.CompilerServices;
+using System.Security;
+namespace CertHelpers
+{
+  public static class Generate
+  {
+    public static X509Certificate2 SelfSigned(string Name, DateTime StartTime, DateTime EndTime)
+    {
+        var data = CreateSelfSignCertificatePfx(Name, StartTime, EndTime);
+        X509Certificate2 cert = new X509Certificate2();
+        cert.Import(data);
+        return cert;
+    }
+
+    private static byte[] CreateSelfSignCertificatePfx(
+        string x500,
+        DateTime startTime,
+        DateTime endTime)
+    {
+        byte[] pfxData = CreateSelfSignCertificatePfx(
+            x500,
+            startTime,
+            endTime,
+            (SecureString)null);
+        return pfxData;
+    }
+
+    private static byte[] CreateSelfSignCertificatePfx(
+        string x500,
+        DateTime startTime,
+        DateTime endTime,
+        string insecurePassword)
+    {
+        byte[] pfxData;
+        SecureString password = null;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(insecurePassword))
+            {
+                password = new SecureString();
+                foreach (char ch in insecurePassword)
+                {
+                    password.AppendChar(ch);
+                }
+
+                password.MakeReadOnly();
+            }
+
+            pfxData = CreateSelfSignCertificatePfx(
+                x500,
+                startTime,
+                endTime,
+                password);
+        }
+        finally
+        {
+            if (password != null)
+            {
+                password.Dispose();
+            }
+        }
+
+        return pfxData;
+    }
+
+    private static byte[] CreateSelfSignCertificatePfx(
+        string x500,
+        DateTime startTime,
+        DateTime endTime,
+        SecureString password)
+    {
+        byte[] pfxData;
+
+        if (x500 == null)
+        {
+            x500 = "";
+        }
+
+        SystemTime startSystemTime = ToSystemTime(startTime);
+        SystemTime endSystemTime = ToSystemTime(endTime);
+        string containerName = Guid.NewGuid().ToString();
+
+        GCHandle dataHandle = new GCHandle();
+        IntPtr providerContext = IntPtr.Zero;
+        IntPtr cryptKey = IntPtr.Zero;
+        IntPtr certContext = IntPtr.Zero;
+        IntPtr certStore = IntPtr.Zero;
+        IntPtr storeCertContext = IntPtr.Zero;
+        IntPtr passwordPtr = IntPtr.Zero;
+        RuntimeHelpers.PrepareConstrainedRegions();
+        try
+        {
+            Check(NativeMethods.CryptAcquireContextW(
+                out providerContext,
+                containerName,
+                null,
+                1, // PROV_RSA_FULL
+                8)); // CRYPT_NEWKEYSET
+
+            Check(NativeMethods.CryptGenKey(
+                providerContext,
+                1, // AT_KEYEXCHANGE
+                1, // CRYPT_EXPORTABLE
+                out cryptKey));
+
+            IntPtr errorStringPtr;
+            int nameDataLength = 0;
+            byte[] nameData;
+
+            // errorStringPtr gets a pointer into the middle of the x500 string,
+            // so x500 needs to be pinned until after we've copied the value
+            // of errorStringPtr.
+            dataHandle = GCHandle.Alloc(x500, GCHandleType.Pinned);
+
+            if (!NativeMethods.CertStrToNameW(
+                0x00010001, // X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+                dataHandle.AddrOfPinnedObject(),
+                3, // CERT_X500_NAME_STR = 3
+                IntPtr.Zero,
+                null,
+                ref nameDataLength,
+                out errorStringPtr))
+            {
+                string error = Marshal.PtrToStringUni(errorStringPtr);
+                throw new ArgumentException(error);
+            }
+
+            nameData = new byte[nameDataLength];
+
+            if (!NativeMethods.CertStrToNameW(
+                0x00010001, // X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
+                dataHandle.AddrOfPinnedObject(),
+                3, // CERT_X500_NAME_STR = 3
+                IntPtr.Zero,
+                nameData,
+                ref nameDataLength,
+                out errorStringPtr))
+            {
+                string error = Marshal.PtrToStringUni(errorStringPtr);
+                throw new ArgumentException(error);
+            }
+
+            dataHandle.Free();
+
+            dataHandle = GCHandle.Alloc(nameData, GCHandleType.Pinned);
+            CryptoApiBlob nameBlob = new CryptoApiBlob(
+                nameData.Length,
+                dataHandle.AddrOfPinnedObject());
+
+            CryptKeyProviderInformation kpi = new CryptKeyProviderInformation();
+            kpi.ContainerName = containerName;
+            kpi.ProviderType = 1; // PROV_RSA_FULL
+            kpi.KeySpec = 1; // AT_KEYEXCHANGE
+
+            certContext = NativeMethods.CertCreateSelfSignCertificate(
+                providerContext,
+                ref nameBlob,
+                0,
+                ref kpi,
+                IntPtr.Zero, // default = SHA1RSA
+                ref startSystemTime,
+                ref endSystemTime,
+                IntPtr.Zero);
+            Check(certContext != IntPtr.Zero);
+            dataHandle.Free();
+
+            certStore = NativeMethods.CertOpenStore(
+                "Memory", // sz_CERT_STORE_PROV_MEMORY
+                0,
+                IntPtr.Zero,
+                0x2000, // CERT_STORE_CREATE_NEW_FLAG
+                IntPtr.Zero);
+            Check(certStore != IntPtr.Zero);
+
+            Check(NativeMethods.CertAddCertificateContextToStore(
+                certStore,
+                certContext,
+                1, // CERT_STORE_ADD_NEW
+                out storeCertContext));
+
+            NativeMethods.CertSetCertificateContextProperty(
+                storeCertContext,
+                2, // CERT_KEY_PROV_INFO_PROP_ID
+                0,
+                ref kpi);
+
+            if (password != null)
+            {
+                passwordPtr = Marshal.SecureStringToCoTaskMemUnicode(password);
+            }
+
+            CryptoApiBlob pfxBlob = new CryptoApiBlob();
+            Check(NativeMethods.PFXExportCertStoreEx(
+                certStore,
+                ref pfxBlob,
+                passwordPtr,
+                IntPtr.Zero,
+                7)); // EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY | REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY
+
+            pfxData = new byte[pfxBlob.DataLength];
+            dataHandle = GCHandle.Alloc(pfxData, GCHandleType.Pinned);
+            pfxBlob.Data = dataHandle.AddrOfPinnedObject();
+            Check(NativeMethods.PFXExportCertStoreEx(
+                certStore,
+                ref pfxBlob,
+                passwordPtr,
+                IntPtr.Zero,
+                7)); // EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY | REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY
+            dataHandle.Free();
+        }
+        finally
+        {
+            if (passwordPtr != IntPtr.Zero)
+            {
+                Marshal.ZeroFreeCoTaskMemUnicode(passwordPtr);
+            }
+
+            if (dataHandle.IsAllocated)
+            {
+                dataHandle.Free();
+            }
+
+            if (certContext != IntPtr.Zero)
+            {
+                NativeMethods.CertFreeCertificateContext(certContext);
+            }
+
+            if (storeCertContext != IntPtr.Zero)
+            {
+                NativeMethods.CertFreeCertificateContext(storeCertContext);
+            }
+
+            if (certStore != IntPtr.Zero)
+            {
+                NativeMethods.CertCloseStore(certStore, 0);
+            }
+
+            if (cryptKey != IntPtr.Zero)
+            {
+                NativeMethods.CryptDestroyKey(cryptKey);
+            }
+
+            if (providerContext != IntPtr.Zero)
+            {
+                NativeMethods.CryptReleaseContext(providerContext, 0);
+                NativeMethods.CryptAcquireContextW(
+                    out providerContext,
+                    containerName,
+                    null,
+                    1, // PROV_RSA_FULL
+                    0x10); // CRYPT_DELETEKEYSET
+            }
+        }
+
+        return pfxData;
+    }
+
+    private static SystemTime ToSystemTime(DateTime dateTime)
+    {
+        long fileTime = dateTime.ToFileTime();
+        SystemTime systemTime;
+        Check(NativeMethods.FileTimeToSystemTime(ref fileTime, out systemTime));
+        return systemTime;
+    }
+
+    private static void Check(bool nativeCallSucceeded)
+    {
+        if (!nativeCallSucceeded)
+        {
+            int error = Marshal.GetHRForLastWin32Error();
+            Marshal.ThrowExceptionForHR(error);
+        }
+    }
+
+    private static class NativeMethods
+    {
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FileTimeToSystemTime(
+            [In] ref long fileTime,
+            out SystemTime systemTime);
+
+        [DllImport("AdvApi32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CryptAcquireContextW(
+            out IntPtr providerContext,
+            [MarshalAs(UnmanagedType.LPWStr)] string container,
+            [MarshalAs(UnmanagedType.LPWStr)] string provider,
+            int providerType,
+            int flags);
+
+        [DllImport("AdvApi32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CryptReleaseContext(
+            IntPtr providerContext,
+            int flags);
+
+        [DllImport("AdvApi32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CryptGenKey(
+            IntPtr providerContext,
+            int algorithmId,
+            int flags,
+            out IntPtr cryptKeyHandle);
+
+        [DllImport("AdvApi32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CryptDestroyKey(
+            IntPtr cryptKeyHandle);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CertStrToNameW(
+            int certificateEncodingType,
+            IntPtr x500,
+            int strType,
+            IntPtr reserved,
+            [MarshalAs(UnmanagedType.LPArray)] [Out] byte[] encoded,
+            ref int encodedLength,
+            out IntPtr errorString);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        public static extern IntPtr CertCreateSelfSignCertificate(
+            IntPtr providerHandle,
+            [In] ref CryptoApiBlob subjectIssuerBlob,
+            int flags,
+            [In] ref CryptKeyProviderInformation keyProviderInformation,
+            IntPtr signatureAlgorithm,
+            [In] ref SystemTime startTime,
+            [In] ref SystemTime endTime,
+            IntPtr extensions);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CertFreeCertificateContext(
+            IntPtr certificateContext);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        public static extern IntPtr CertOpenStore(
+            [MarshalAs(UnmanagedType.LPStr)] string storeProvider,
+            int messageAndCertificateEncodingType,
+            IntPtr cryptProvHandle,
+            int flags,
+            IntPtr parameters);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CertCloseStore(
+            IntPtr certificateStoreHandle,
+            int flags);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CertAddCertificateContextToStore(
+            IntPtr certificateStoreHandle,
+            IntPtr certificateContext,
+            int addDisposition,
+            out IntPtr storeContextPtr);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CertSetCertificateContextProperty(
+            IntPtr certificateContext,
+            int propertyId,
+            int flags,
+            [In] ref CryptKeyProviderInformation data);
+
+        [DllImport("Crypt32.dll", SetLastError = true, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PFXExportCertStoreEx(
+            IntPtr certificateStoreHandle,
+            ref CryptoApiBlob pfxBlob,
+            IntPtr password,
+            IntPtr reserved,
+            int flags);
+
+        
+
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SystemTime
+    {
+        public short Year;
+        public short Month;
+        public short DayOfWeek;
+        public short Day;
+        public short Hour;
+        public short Minute;
+        public short Second;
+        public short Milliseconds;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CryptoApiBlob
+    {
+        public int DataLength;
+        public IntPtr Data;
+
+        public CryptoApiBlob(int dataLength, IntPtr data)
+        {
+            this.DataLength = dataLength;
+            this.Data = data;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct CryptKeyProviderInformation
+    {
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string ContainerName;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string ProviderName;
+        public int ProviderType;
+        public int Flags;
+        public int ProviderParameterCount;
+        public IntPtr ProviderParameters; // PCRYPT_KEY_PROV_PARAM
+        public int KeySpec;
+    }
+  }
+}
+'@
+  
+  function GenerateX509Cert
+  {
+    param(
+      $Name,
+      $startTime,
+      $endTime
+    )
+    return [CertHelpers.Generate]::SelfSigned($Name, $startTime, $endTime)
+  }
+  
+  ######## SSL Cert Generation ########
+
   ########## CMD FUNCTIONS ##########
   function Setup_CMD
   {
@@ -836,6 +1411,16 @@ Examples:
     $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_DNS} + "`n}`n`n")
     if($l){return "This feature is not available."}
     else{$InvokeString = "Main @('$c','$p','$dns',$dnsft) "}
+  }
+  elseif($ssl -ne "")
+  {
+    Write-Verbose "Set Stream 1: TCP/SSL"
+    $FunctionString = ("function Stream1_Setup`n{`n" + ${function:Setup_TCPSSL} + "`n}`n`n")
+    $FunctionString += ("function Stream1_ReadData`n{`n" + ${function:ReadData_TCPSSL} + "`n}`n`n")
+    $FunctionString += ("function Stream1_WriteData`n{`n" + ${function:WriteData_TCPSSL} + "`n}`n`n")
+    $FunctionString += ("function Stream1_Close`n{`n" + ${function:Close_TCPSSL} + "`n}`n`n")
+    if($l){$InvokeString = "Main @('',`$True,$p,$t) "}
+    else{$InvokeString = "Main @('$c',`$False,$p,$t) "}
   }
   else
   {
